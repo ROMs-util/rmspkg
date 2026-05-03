@@ -160,16 +160,6 @@ External tools that must be installed on the machine:
 }
 ```
 
-### Script dependencies
-Files that must exist in the project folder before installing:
-
-```json
-"scripts": {
-    "main.ps1": "required",    <- installer exits if not found
-    "helper.ps1": "optional"   <- installer warns but continues
-}
-```
-
 ---
 
 ## Uninstalling

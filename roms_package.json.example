@@ -17,9 +17,6 @@
         "tools": {
             "toolName": "required | optional | version-number"
         },
-        "scripts": {
-            "script-name.ps1": "required | optional"
-        }
     },
 
     "metadata": {

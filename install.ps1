@@ -163,28 +163,6 @@ if ($config.dependencies -and $config.dependencies.tools) {
 }
 
 # ---------------------------------------------
-# CHECK SCRIPT DEPENDENCIES
-# ---------------------------------------------
-if ($config.dependencies -and $config.dependencies.scripts) {
-    $scripts = $config.dependencies.scripts
-
-    foreach ($script in $scripts.PSObject.Properties) {
-        $scriptName = $script.Name
-        $scriptType = $script.Value.Trim().ToLower()
-        $scriptPath = Join-Path $scriptDir $scriptName
-
-        if (Test-Path $scriptPath) {
-            Write-Host "[OK]        $scriptName found"
-        } elseif ($scriptType -eq "required") {
-            Write-Error "[ERROR] Required script '$scriptName' not found in $scriptDir"
-            exit 1
-        } else {
-            Write-Host "[WARNING]   Optional script '$scriptName' not found - some features may not work"
-        }
-    }
-}
-
-# ---------------------------------------------
 # CREATE INSTALL DIRECTORY
 # ---------------------------------------------
 if (-not (Test-Path $installDir)) {
