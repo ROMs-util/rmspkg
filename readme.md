@@ -174,19 +174,31 @@ Files that must exist in the project folder before installing:
 
 ## Uninstalling
 
-No automated uninstaller yet. To remove manually:
+**Option 1 - Automatic (recommended):**
+
+Run from the project source folder:
+```cmd
+run.bat -uninstall
+```
+
+This will:
+- Ask for confirmation before proceeding
+- Delete the package install folder only — parent folder untouched
+- Remove install directory from User PATH
+
+Open a new terminal after uninstall to apply PATH changes.
+
+**Option 2 - Manual:**
 
 **1. Delete installed files:**
 ```cmd
-rmdir /S /Q "C:
-C:\roms\your-project-name"
+rmdir /S /Q "C:\roms\your-project-name"
 ```
 
 **2. Remove from User PATH:**
 ```powershell
 $path = [Environment]::GetEnvironmentVariable("PATH", "User")
-$newPath = ($path -split ";" | Where-Object { $_ -ne "C:
-C:\roms\your-project-name" }) -join ";"
+$newPath = ($path -split ";" | Where-Object { $_ -ne "C:\roms\your-project-name" }) -join ";"
 [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
 ```
 
@@ -198,4 +210,3 @@ C:\roms\your-project-name" }) -join ";"
 
 - Install directory is hardcoded in `roms_package.json` - no interactive path selection yet
 - Version checking for tools not yet implemented
-- No automated uninstaller yet

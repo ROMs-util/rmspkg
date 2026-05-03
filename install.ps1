@@ -13,6 +13,11 @@
     .\install.ps1
 #>
 
+param(
+    [Parameter(Mandatory = $false)]
+    [switch]$uninstall
+)
+
 $scriptDir  = Split-Path -Parent $PSCommandPath
 $configFile = Join-Path $scriptDir "roms_package.json"
 
@@ -22,6 +27,7 @@ $configFile = Join-Path $scriptDir "roms_package.json"
 $currentUser = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     $argList = @("-NoExit", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+    if ($uninstall) { $argList += "-uninstall" }
     Start-Process powershell -Verb RunAs -ArgumentList $argList
     exit 0
 }
@@ -60,6 +66,54 @@ if (-not $config.files -or $config.files.Count -eq 0) {
 $installDir  = $config.installDir
 $commandName = $config.commandName
 $files       = $config.files
+
+# ---------------------------------------------
+# UNINSTALL MODE
+# ---------------------------------------------
+if ($uninstall) {
+    Write-Host ""
+    Write-Host "Uninstaller - $commandName"
+    Write-Host "-----------------------------------------------------"
+
+    $confirm = Read-Host "This will delete $installDir and remove it from PATH. Proceed? (y/n)"
+    if ($confirm.Trim().ToLower() -ne "y") {
+        Write-Host "[ABORTED] No changes made."
+        exit 0
+    }
+
+    if (Test-Path $installDir) {
+        try {
+            Remove-Item -Path $installDir -Recurse -Force -ErrorAction Stop
+            Write-Host "[REMOVED]   $installDir"
+        } catch {
+            Write-Host "[FAILED]    Could not remove $installDir -> $_"
+            exit 1
+        }
+    } else {
+        Write-Host "[NOT FOUND] $installDir does not exist"
+    }
+
+    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if (($currentPath -split ";") -contains $installDir) {
+        try {
+            $newPath = ($currentPath -split ";" | Where-Object { $_ -ne $installDir }) -join ";"
+            [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+            Write-Host "[PATH]      $installDir removed from User PATH"
+        } catch {
+            Write-Host "[FAILED]    Could not update User PATH -> $_"
+            exit 1
+        }
+    } else {
+        Write-Host "[NOT FOUND] $installDir not in User PATH"
+    }
+
+    Write-Host "-----------------------------------------------------"
+    Write-Host ""
+    Write-Host "[SUCCESS] $commandName uninstalled."
+    Write-Host "          Open a new terminal to apply PATH changes."
+    Write-Host ""
+    exit 0
+}
 
 Write-Host ""
 Write-Host "Installer - $commandName"
@@ -145,7 +199,10 @@ if (-not (Test-Path $installDir)) {
 # ---------------------------------------------
 $copyFailed = $false
 
-foreach ($file in $files) {
+# Always include roms_package.json — needed for uninstall, update, repair
+$allFiles = @($files) + @("roms_package.json")
+
+foreach ($file in $allFiles) {
     $src  = Join-Path $scriptDir $file
     $dest = Join-Path $installDir $file
 
