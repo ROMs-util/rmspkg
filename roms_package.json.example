@@ -1,28 +1,24 @@
 {
     "_comment": "roms_package.json — installer config template. Fill in values for your project.",
 
-    "installDir": "C:\\your\\install\\path",
+    "name": "your-project-name",
+    "version": "1.0.0",
+    "description": "short description of what this script does",
     "commandName": "your-command-name",
+    "installDir": "C:\\roms\\your-app",
     "files": [
-        "your-main-script.ps1",
-        "run.bat"
+        "main.ps1",
+        "run.bat",
+        "rms_install.ps1"
     ],
 
     "dependencies": {
         "system": {
             "os": "Windows 10 / 11",
             "powershell": "5.1",
-            "privileges": "Administrator | User"
-        },
-        "tools": {
-            "toolName": "required | optional | version-number"
-        },
+            "privileges": "Administrator"
+        }
     },
 
-    "metadata": {
-        "name": "your-project-name",
-        "version": "0.0.0",
-        "description": "short description of what this script does",
-        "author": ""
-    }
+    "_hooks_info": "If 'rms_install.ps1' is included in the 'files' list, it will be executed automatically after all files are copied."
 }
