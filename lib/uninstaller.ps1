@@ -4,13 +4,10 @@ function Invoke-Uninstallation {
     $commandName = $packageConfig.commandName
     $installDir = $packageConfig.installDir
 
-    Write-Log "-----------------------------------------------------"
-    Write-Log "rmspkg uninstall - $commandName"
-
     $confirm = Read-Host "This will delete $installDir and all tracked shims. Proceed? (y/n)"
     if ($confirm.Trim().ToLower() -ne "y") { Write-Log "[ABORTED] Cancelled."; exit 0 }
 
-    # Hooks
+    Write-Log "Starting uninstallation for $commandName..."
     $hook = Join-Path $installDir "rms_uninstall.ps1"
     if (Test-Path $hook) { 
         Write-Log "Running uninstall hook..."
@@ -37,7 +34,4 @@ function Invoke-Uninstallation {
         Remove-Item $meta -Force
         Write-Log "Unregistered from database." 
     }
-
-    Write-Log "rmspkg: $commandName uninstalled successfully."
-    Write-Log "-----------------------------------------------------"
 }

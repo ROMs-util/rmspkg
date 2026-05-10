@@ -62,7 +62,6 @@ function Invoke-Installation {
         }
 
         $rollbackNeeded = $false
-        Write-Log "Installation completed successfully."
     } catch {
         Write-Log "ERROR: $_" "ERROR"
         if ($rollbackNeeded) {

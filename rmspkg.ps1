@@ -1,9 +1,6 @@
 param(
     [Parameter(Mandatory = $false, Position = 0)]
-    [string]$packagePath,
-
-    [Parameter(Mandatory = $false)]
-    [string]$config,
+    [string]$inputPath,
 
     [Parameter(Mandatory = $false)]
     [switch]$uninstall,
@@ -11,12 +8,13 @@ param(
     [Parameter(Mandatory = $false)]
     [switch]$help,
 
+    # Internal parameters
     [switch]$installEngine,
     [switch]$skipAdvice
 )
 
 # ---------------------------------------------
-# LOAD MODULES (Dot-Sourcing)
+# LOAD MODULES
 # ---------------------------------------------
 $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "core.ps1")
@@ -26,31 +24,32 @@ $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "uninstaller.ps1")
 
 # ---------------------------------------------
-# PRE-FLIGHT CHECKS (NON-ADMIN)
+# PRE-FLIGHT CHECKS
 # ---------------------------------------------
-if ($help -or (-not $packagePath -and -not $config -and -not $uninstall)) {
+if ($help -or (-not $inputPath -and -not $uninstall)) {
     $invokedAs = if ($PSScriptRoot -notlike "*C:\roms*") { ".\rmspkg.bat" } else { "rmspkg" }
     Show-Help -invokedAs $invokedAs
     exit 0
 }
 
-# Resolve Paths
-if ($packagePath) { $packagePath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $packagePath)) }
-if ($config)      { $config = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $config)) }
-
-# Discovery Identity
+# ---------------------------------------------
+# IDENTITY DISCOVERY (The Brain)
+# ---------------------------------------------
 $packageConfig = $null
 $isRmsPackage  = $false
+$resolvedPath  = $null
 
-if ($config -and (Test-Path $config)) {
-    $packageConfig = Get-Content $config -Raw | ConvertFrom-Json
-} elseif ($packagePath) {
-    if (Test-Path $packagePath -PathType Leaf) {
-        if ($packagePath.EndsWith(".rms", [System.StringComparison]::OrdinalIgnoreCase)) {
+if ($inputPath) {
+    # 1. Check if it's a direct file path
+    if (Test-Path $inputPath -PathType Leaf) {
+        $resolvedPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $inputPath))
+        
+        if ($resolvedPath.EndsWith(".rms", [System.StringComparison]::OrdinalIgnoreCase)) {
             $isRmsPackage = $true
+            # Peek inside ZIP for manifest
             Add-Type -AssemblyName System.IO.Compression.FileSystem
             try {
-                $zip = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
+                $zip = [System.IO.Compression.ZipFile]::OpenRead($resolvedPath)
                 $entry = $zip.Entries | Where-Object { $_.FullName -eq "roms_package.json" }
                 if ($entry) {
                     $temp = Join-Path $env:TEMP "rmspkg_peek_$([guid]::NewGuid().ToString()).json"
@@ -60,17 +59,35 @@ if ($config -and (Test-Path $config)) {
                 }
                 $zip.Dispose()
             } catch { if ($zip) { $zip.Dispose() } }
+        } elseif ($resolvedPath.EndsWith(".json", [System.StringComparison]::OrdinalIgnoreCase)) {
+            $packageConfig = Get-Content $resolvedPath -Raw | ConvertFrom-Json
         }
-    } elseif (Test-Path $packagePath -PathType Container) {
-        $localJson = Join-Path $packagePath "roms_package.json"
+    } 
+    # 2. Check if it's a directory
+    elseif (Test-Path $inputPath -PathType Container) {
+        $resolvedPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $inputPath))
+        $localJson = Join-Path $resolvedPath "roms_package.json"
         if (Test-Path $localJson) { $packageConfig = Get-Content $localJson -Raw | ConvertFrom-Json }
     }
+    # 3. Assume it's an App Name (Registry Lookup)
+    else {
+        $metaJson = Join-Path $metadataRoot "$inputPath.json"
+        if (Test-Path $metaJson) {
+            $packageConfig = Get-Content $metaJson -Raw | ConvertFrom-Json
+        }
+    }
 } elseif ($uninstall) {
+    # Naked uninstall, check current directory
     $localJson = Join-Path (Get-Location).Path "roms_package.json"
     if (Test-Path $localJson) { $packageConfig = Get-Content $localJson -Raw | ConvertFrom-Json }
 }
 
-$commandName = if ($packageConfig -and $packageConfig.commandName) { $packageConfig.commandName } else { "unknown" }
+if (-not $packageConfig) {
+    Write-Error "[FATAL] Could not identify package or application from input: '$inputPath'"
+    exit 1
+}
+
+$commandName = $packageConfig.commandName
 
 # ---------------------------------------------
 # ADVICE & ELEVATION
@@ -85,7 +102,8 @@ if (-not $skipAdvice -and -not (Test-Path $engineDir) -and -not (Test-Path $engi
 }
 
 # Elevation Check
-$params = @{ packagePath=$packagePath; config=$config; uninstall=$uninstall; installEngine=$finalInstallEngine }
+$pathForRelaunch = if ($resolvedPath) { $resolvedPath } else { $inputPath }
+$params = @{ inputPath=$pathForRelaunch; uninstall=$uninstall; installEngine=$finalInstallEngine }
 if (-not (Confirm-Elevation -cmdPath $PSCommandPath -params $params)) { exit 0 }
 
 # ---------------------------------------------
@@ -102,17 +120,20 @@ Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScri
 # Action Routing
 if ($uninstall) {
     Invoke-Uninstallation -packageConfig $packageConfig
+    Write-Host "`n-----------------------------------------------------"
+    Write-Host "[SUCCESS] $commandName uninstalled."
+    Write-Host "-----------------------------------------------------`n"
 } else {
     $logFile = Join-Path $logRoot "$commandName.log"
-    Write-Log "Starting modular installation for $commandName"
+    Write-Log "Starting installation for $commandName"
     try {
-        Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $packagePath -sourceDir (Split-Path $PSCommandPath)
+        Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath)
+        Write-Host "`n-----------------------------------------------------"
+        Write-Host "[SUCCESS] $commandName installed."
+        Write-Host "          Log: $logFile"
+        Write-Host "-----------------------------------------------------`n"
     } catch {
-        Write-Error "[FATAL] Modular Installation failed. See log: $logFile"
+        Write-Error "[FATAL] Installation failed. See log: $logFile"
         exit 1
     }
 }
-
-Write-Host "`n-----------------------------------------------------"
-Write-Host "[SUCCESS] Operation finished for $commandName."
-Write-Host "-----------------------------------------------------`n"
