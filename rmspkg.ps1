@@ -1,22 +1,27 @@
 param(
-    [Parameter(Mandatory = $false, Position = 0)]
-    [string]$inputPath,
-
-    [Parameter(Mandatory = $false)]
-    [switch]$uninstall,
-
-    [Parameter(Mandatory = $false)]
-    [switch]$help,
-
-    # Internal parameters
+    # Internal parameters for orchestration
     [switch]$installEngine,
     [switch]$skipAdvice
 )
 
 # ---------------------------------------------
+# ARGUMENT PARSING (Modern Standard)
+# ---------------------------------------------
+$command = $args[0]
+$inputPath = $args[1]
+
+# Global flags (Bilingual Standard)
+$global:AutoConfirm = ($args -contains "-y") -or ($args -contains "--yes")
+$global:Verbose     = ($args -contains "-v") -or ($args -contains "--verbose")
+
+# ---------------------------------------------
 # LOAD MODULES
 # ---------------------------------------------
 $libPath = Join-Path $PSScriptRoot "lib"
+if (-not (Test-Path $libPath)) {
+    Write-Error "[FATAL] Library folder not found at $libPath"
+    exit 1
+}
 . (Join-Path $libPath "core.ps1")
 . (Join-Path $libPath "help.ps1")
 . (Join-Path $libPath "environment.ps1")
@@ -24,13 +29,19 @@ $libPath = Join-Path $PSScriptRoot "lib"
 . (Join-Path $libPath "uninstaller.ps1")
 
 # ---------------------------------------------
-# PRE-FLIGHT CHECKS
+# COMMAND ROUTING
 # ---------------------------------------------
-if ($help -or (-not $inputPath -and -not $uninstall)) {
+# Default to help if nothing provided or help requested
+if (-not $command -or $command -in @("help", "h", "?")) {
     $invokedAs = if ($PSScriptRoot -notlike "*C:\roms*") { ".\rmspkg.bat" } else { "rmspkg" }
     Show-Help -invokedAs $invokedAs
     exit 0
 }
+
+# ---------------------------------------------
+# IDENTITY DISCOVERY (The Brain)
+# ---------------------------------------------
+
 
 # ---------------------------------------------
 # IDENTITY DISCOVERY (The Brain)
@@ -76,7 +87,7 @@ if ($inputPath) {
             $packageConfig = Get-Content $metaJson -Raw | ConvertFrom-Json
         }
     }
-} elseif ($uninstall) {
+} elseif ($command -eq "uninstall") {
     # Naked uninstall, check current directory
     $localJson = Join-Path (Get-Location).Path "roms_package.json"
     if (Test-Path $localJson) { $packageConfig = Get-Content $localJson -Raw | ConvertFrom-Json }
@@ -103,7 +114,7 @@ if (-not $skipAdvice -and -not (Test-Path $engineDir) -and -not (Test-Path $engi
 
 # Elevation Check
 $pathForRelaunch = if ($resolvedPath) { $resolvedPath } else { $inputPath }
-$params = @{ inputPath=$pathForRelaunch; uninstall=$uninstall; installEngine=$finalInstallEngine }
+$params = @{ command=$command; inputPath=$pathForRelaunch; installEngine=$finalInstallEngine }
 if (-not (Confirm-Elevation -cmdPath $PSCommandPath -params $params)) { exit 0 }
 
 # ---------------------------------------------
@@ -118,22 +129,29 @@ Update-EnvironmentPath
 Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScriptRoot -engineDir $engineDir -engineShimPath $engineShim
 
 # Action Routing
-if ($uninstall) {
-    Invoke-Uninstallation -packageConfig $packageConfig
-    Write-Host "`n-----------------------------------------------------"
-    Write-Host "[SUCCESS] $commandName uninstalled."
-    Write-Host "-----------------------------------------------------`n"
-} else {
-    $logFile = Join-Path $logRoot "$commandName.log"
-    Write-Log "Starting installation for $commandName"
-    try {
-        Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath)
+switch ($command) {
+    "uninstall" {
+        Invoke-Uninstallation -packageConfig $packageConfig
         Write-Host "`n-----------------------------------------------------"
-        Write-Host "[SUCCESS] $commandName installed."
-        Write-Host "          Log: $logFile"
+        Write-Host "[SUCCESS] $commandName uninstalled."
         Write-Host "-----------------------------------------------------`n"
-    } catch {
-        Write-Error "[FATAL] Installation failed. See log: $logFile"
+    }
+    "install" {
+        $logFile = Join-Path $logRoot "$commandName.log"
+        Write-Log "Starting installation for $commandName"
+        try {
+            Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath)
+            Write-Host "`n-----------------------------------------------------"
+            Write-Host "[SUCCESS] $commandName installed."
+            Write-Host "          Log: $logFile"
+            Write-Host "-----------------------------------------------------`n"
+        } catch {
+            Write-Error "[FATAL] Installation failed. See log: $logFile"
+            exit 1
+        }
+    }
+    Default {
+        Write-Error "[FATAL] Unknown command: $command"
         exit 1
     }
 }

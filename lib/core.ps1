@@ -50,8 +50,8 @@ function Confirm-Elevation {
         Write-Host "[INFO] Elevation required to modify $systemRoot. Requesting Administrator privileges..."
         
         $argString = "-NoExit -ExecutionPolicy Bypass -File `"$cmdPath`""
+        if ($params.command) { $argString += " $($params.command)" }
         if ($params.inputPath) { $argString += " `"$($params.inputPath)`"" }
-        if ($params.uninstall) { $argString += " -uninstall" }
         if ($params.installEngine) { $argString += " -installEngine" }
         $argString += " -skipAdvice" 
         

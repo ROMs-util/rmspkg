@@ -10,24 +10,24 @@ function Show-Help {
     Write-Host ""
     
     Write-Host "USAGE:" -ForegroundColor Yellow
-    Write-Host "  $invokedAs <path|name> [options]"
+    Write-Host "  $invokedAs <command> [target]"
     Write-Host ""
 
-    Write-Host "OPTIONS:" -ForegroundColor Yellow
-    Write-Host "  <path|name>        Path to an .rms/folder OR name of an installed app."
-    Write-Host "  --uninstall        Switch to uninstallation mode."
-    Write-Host "  --help             Show this menu."
+    Write-Host "COMMANDS:" -ForegroundColor Yellow
+    Write-Host "  install <path>     Install from an .rms file or folder."
+    Write-Host "  uninstall <name>   Remove an installed package by its command name."
+    Write-Host "  help               Show this menu."
     Write-Host ""
 
     Write-Host "SYSTEM PATHS:" -ForegroundColor Yellow
-    Write-Host "  Root:    C:\roms"
-    Write-Host "  Bin:     C:\roms\bin (Command Launchers)"
-    Write-Host "  Logs:    C:\roms\logs"
+    Write-Host "  Root:    $systemRoot"
+    Write-Host "  Bin:     $binRoot (Command Launchers)"
+    Write-Host "  Logs:    $logRoot"
     Write-Host ""
 
     Write-Host "EXAMPLES:" -ForegroundColor Yellow
-    Write-Host "  Install:   $invokedAs .\myapp.rms"
-    Write-Host "  Uninstall: $invokedAs --uninstall myapp"
+    Write-Host "  Install:   $invokedAs install .\myapp.rms"
+    Write-Host "  Uninstall: $invokedAs uninstall myapp"
     Write-Host ""
     
     Write-Host "Note: Administrator privileges are only required for installation/removal."
