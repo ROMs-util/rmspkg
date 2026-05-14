@@ -1,15 +1,19 @@
+[CmdletBinding()]
 param(
+    [Parameter(Position=0)]
+    [string]$Command,
+    [Parameter(Position=1)]
+    [string]$InputPath,
+    
     # Internal parameters for orchestration
-    [switch]$installEngine,
-    [switch]$skipAdvice
+    [switch]$bootstrap,
+    [switch]$quiet,
+    [switch]$noShim
 )
 
 # ---------------------------------------------
 # ARGUMENT PARSING (Modern Standard)
 # ---------------------------------------------
-$command = $args[0]
-$inputPath = $args[1]
-
 # Global flags (Bilingual Standard)
 $global:AutoConfirm = ($args -contains "-y") -or ($args -contains "--yes")
 $global:Verbose     = ($args -contains "-v") -or ($args -contains "--verbose")
@@ -101,10 +105,10 @@ if (-not $packageConfig) {
 $commandName = $packageConfig.commandName
 
 # ---------------------------------------------
-# ADVICE & ELEVATION
+# ADVICE & ELEVATION (DEPRECATED: Manager handles elevation)
 # ---------------------------------------------
-$finalInstallEngine = $installEngine
-if (-not $skipAdvice -and -not (Test-Path $engineDir) -and -not (Test-Path $engineShim) -and ($PSScriptRoot -ne $engineDir)) {
+$finalInstallEngine = $bootstrap
+if (-not $quiet -and -not (Test-Path $engineDir) -and -not (Test-Path $engineShim) -and ($PSScriptRoot -ne $engineDir)) {
     Write-Host "`nADVICE: rmspkg is running in portable mode." -ForegroundColor Yellow
     Write-Host "Would you like to install it permanently to $engineDir?"
     Write-Host "This will also register 'rmspkg' as a global command."
@@ -112,13 +116,8 @@ if (-not $skipAdvice -and -not (Test-Path $engineDir) -and -not (Test-Path $engi
     if ($choice.Trim().ToLower() -eq "y") { $finalInstallEngine = $true }
 }
 
-# Elevation Check
-$pathForRelaunch = if ($resolvedPath) { $resolvedPath } else { $inputPath }
-$params = @{ command=$command; inputPath=$pathForRelaunch; installEngine=$finalInstallEngine }
-if (-not (Confirm-Elevation -cmdPath $PSCommandPath -params $params)) { exit 0 }
-
 # ---------------------------------------------
-# EXECUTION (NOW ELEVATED)
+# EXECUTION
 # ---------------------------------------------
 
 # Initialize System
@@ -140,7 +139,27 @@ switch ($command) {
         $logFile = Join-Path $logRoot "$commandName.log"
         Write-Log "Starting installation for $commandName"
         try {
-            Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath)
+            $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$noShim
+
+            $packageId = if ($packageConfig.version) { "$($packageConfig.commandName)-$($packageConfig.version)" } else { $packageConfig.commandName }
+            $foundExecutables = Find-PackageExecutables -InstallDirectory $installedPath
+            
+            # Identify the primary executable (the one the user actually calls)
+            $primaryExecutable = Join-Path $installedPath "$($packageConfig.commandName).bat"
+            if (-not (Test-Path $primaryExecutable)) { $primaryExecutable = Join-Path $installedPath "$($packageConfig.commandName).exe" }
+            if (-not (Test-Path $primaryExecutable)) { $primaryExecutable = Join-Path $installedPath "$($packageConfig.commandName).ps1" }
+            # Fallback to the first found executable if the named one doesn't exist
+            if (-not (Test-Path $primaryExecutable) -and $foundExecutables.Count -gt 0) { $primaryExecutable = $foundExecutables[0] }
+
+            $installationReport = [PSCustomObject]@{
+                packageId = $packageId
+                commandName = $packageConfig.commandName
+                installDir = $installedPath
+                primaryExecutable = $primaryExecutable
+                executables = $foundExecutables
+            }
+            $installationReport | ConvertTo-Json -Depth 10 -Compress
+
             Write-Host "`n-----------------------------------------------------"
             Write-Host "[SUCCESS] $commandName installed."
             Write-Host "          Log: $logFile"

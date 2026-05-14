@@ -1,5 +1,5 @@
 function Invoke-Installation {
-    param($packageConfig, $isRmsPackage, $packagePath, $sourceDir)
+    param($packageConfig, $isRmsPackage, $packagePath, $sourceDir, [switch]$noShim)
 
     $rollbackNeeded = $false
     $createdDir = $false
@@ -44,7 +44,7 @@ function Invoke-Installation {
             $exec = Join-Path $installDir "$commandName.bat"
             if (-not (Test-Path $exec)) { $exec = Join-Path $installDir "$commandName.ps1" } 
         }
-        Create-Shim $commandName $exec
+        if (-not $noShim) { Create-Shim $commandName $exec }
 
         # Register metadata
         $final = $packageConfig
@@ -52,7 +52,7 @@ function Invoke-Installation {
             $final | Add-Member -MemberType NoteProperty -Name "artifacts" -Value $global:globalArtifacts -Force 
         }
         $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $metadataRoot "$commandName.json") -Encoding utf8
-        Write-Log "Registered with $($global:globalArtifacts.Count) artifacts."
+        if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." }
 
         # Post Hook
         $post = Join-Path $installDir "rms_install.ps1"
@@ -62,6 +62,7 @@ function Invoke-Installation {
         }
 
         $rollbackNeeded = $false
+        return $installDir # Return the installation directory
     } catch {
         Write-Log "ERROR: $_" "ERROR"
         if ($rollbackNeeded) {
@@ -70,4 +71,25 @@ function Invoke-Installation {
         }
         throw $_
     }
+}
+
+function Find-PackageExecutables {
+    param(
+        [string]$InstallDirectory
+    )
+
+    $executables = @()
+    $executableExtensions = @(".exe", ".cmd", ".ps1", ".bat")
+    $excludedFileNames = @("rms_install.ps1", "rms_uninstall.ps1")
+
+    Get-ChildItem -Path $InstallDirectory -File -Recurse | ForEach-Object {
+        $file = $_
+        if ($executableExtensions -contains $file.Extension.ToLower()) {
+            # Exclude specific internal scripts
+            if ($excludedFileNames -notcontains $file.Name.ToLower()) {
+                $executables += $file.FullName
+            }
+        }
+    }
+    return $executables
 }
