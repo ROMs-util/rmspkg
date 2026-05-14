@@ -4,8 +4,10 @@ function Invoke-Uninstallation {
     $commandName = $packageConfig.commandName
     $installDir = $packageConfig.installDir
 
-    $confirm = Read-Host "This will delete $installDir and all tracked shims. Proceed? (y/n)"
-    if ($confirm.Trim().ToLower() -ne "y") { Write-Log "[ABORTED] Cancelled."; exit 0 }
+    if (-not $global:AutoConfirm) {
+        $confirm = Read-Host "This will delete $installDir and all tracked shims. Proceed? (y/n)"
+        if ($confirm.Trim().ToLower() -ne "y") { Write-Log "[ABORTED] Cancelled."; exit 0 }
+    }
 
     Write-Log "Starting uninstallation for $commandName..."
     $hook = Join-Path $installDir "rms_uninstall.ps1"
@@ -29,7 +31,7 @@ function Invoke-Uninstallation {
         Write-Log "Deleted: $installDir" 
     }
 
-    $meta = Join-Path $metadataRoot "$commandName.json"
+    $meta = Join-Path $metadataRoot "$($packageConfig.name).json"
     if (Test-Path $meta) { 
         Remove-Item $meta -Force
         Write-Log "Unregistered from database." 

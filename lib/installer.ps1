@@ -4,7 +4,9 @@ function Invoke-Installation {
     $rollbackNeeded = $false
     $createdDir = $false
     $commandName = $packageConfig.commandName
-    $installDir = $packageConfig.installDir
+    
+    # Robustness: Default installDir if missing
+    $installDir = if ($packageConfig.installDir) { $packageConfig.installDir } else { Join-Path $systemRoot $packageConfig.name }
 
     try {
         Check-RomsDependencies $packageConfig.dependencies
@@ -48,10 +50,12 @@ function Invoke-Installation {
 
         # Register metadata
         $final = $packageConfig
+        if (-not $final.installDir) { $final | Add-Member -MemberType NoteProperty -Name "installDir" -Value $installDir -Force }
+        
         if ($global:globalArtifacts.Count -gt 0) { 
             $final | Add-Member -MemberType NoteProperty -Name "artifacts" -Value $global:globalArtifacts -Force 
         }
-        $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $metadataRoot "$commandName.json") -Encoding utf8
+        $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $metadataRoot "$($packageConfig.name).json") -Encoding utf8
         if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." }
 
         # Post Hook

@@ -5,6 +5,9 @@ param(
     [Parameter(Position=1)]
     [string]$InputPath,
     
+    # Global flags
+    [Alias("y")][switch]$yes,
+
     # Internal parameters for orchestration
     [switch]$bootstrap,
     [switch]$quiet,
@@ -14,9 +17,8 @@ param(
 # ---------------------------------------------
 # ARGUMENT PARSING (Modern Standard)
 # ---------------------------------------------
-# Global flags (Bilingual Standard)
-$global:AutoConfirm = ($args -contains "-y") -or ($args -contains "--yes")
-$global:Verbose     = ($args -contains "-v") -or ($args -contains "--verbose")
+$global:AutoConfirm = $yes -or ($args -contains "-y") -or ($args -contains "--yes")
+$global:Verbose     = $PSBoundParameters.Verbose -or ($args -contains "-v") -or ($args -contains "--verbose")
 
 # ---------------------------------------------
 # LOAD MODULES
@@ -136,12 +138,12 @@ switch ($command) {
         Write-Host "-----------------------------------------------------`n"
     }
     "install" {
-        $logFile = Join-Path $logRoot "$commandName.log"
+        $logFile = Join-Path $logRoot "$($packageConfig.name).log"
         Write-Log "Starting installation for $commandName"
         try {
             $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$noShim
 
-            $packageId = if ($packageConfig.version) { "$($packageConfig.commandName)-$($packageConfig.version)" } else { $packageConfig.commandName }
+            $packageId = if ($packageConfig.version) { "$($packageConfig.name)-$($packageConfig.version)" } else { $packageConfig.name }
             $foundExecutables = Find-PackageExecutables -InstallDirectory $installedPath
             
             # Identify the primary executable (the one the user actually calls)
