@@ -42,6 +42,10 @@ function Invoke-Installation {
 
         # Create Shim
         $exec = $packageConfig.executable
+        if ($exec -and -not [System.IO.Path]::IsPathRooted($exec)) {
+            $exec = Join-Path $installDir $exec
+        }
+
         if (-not $exec) { 
             $exec = Join-Path $installDir "$commandName.bat"
             if (-not (Test-Path $exec)) { $exec = Join-Path $installDir "$commandName.ps1" } 
@@ -50,6 +54,9 @@ function Invoke-Installation {
 
         # Register metadata
         $final = $packageConfig
+        # Ensure absolute path is persisted
+        $final.executable = $exec
+        
         if (-not $final.installDir) { $final | Add-Member -MemberType NoteProperty -Name "installDir" -Value $installDir -Force }
         
         if ($global:globalArtifacts.Count -gt 0) { 
