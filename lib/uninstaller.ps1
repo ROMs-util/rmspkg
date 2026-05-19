@@ -2,15 +2,16 @@ function Invoke-Uninstallation {
     param($packageConfig)
 
     $commandName = $packageConfig.commandName
-    $installDir = $packageConfig.installDir
+    # Robustness: Force name-based uninstallation path (Enforce Standard)
+    $appDir = [System.IO.Path]::GetFullPath((Join-Path $systemRoot $packageConfig.name))
 
     if (-not $global:AutoConfirm) {
-        $confirm = Read-Host "This will delete $installDir and all tracked shims. Proceed? (y/n)"
+        $confirm = Read-Host "This will delete $appDir and all tracked shims. Proceed? (y/n)"
         if ($confirm.Trim().ToLower() -ne "y") { Write-Log "[ABORTED] Cancelled."; exit 0 }
     }
 
     Write-Log "Starting uninstallation for $commandName..."
-    $hook = Join-Path $installDir "rms_uninstall.ps1"
+    $hook = Join-Path $appDir "rms_uninstall.ps1"
     if (Test-Path $hook) { 
         Write-Log "Running uninstall hook..."
         & $hook 2>&1 | ForEach-Object { Write-Log "  [HOOK] $_" } 
@@ -26,9 +27,9 @@ function Invoke-Uninstallation {
         }
     }
 
-    if (Test-Path $installDir) { 
-        Remove-Item -Path $installDir -Recurse -Force
-        Write-Log "Deleted: $installDir" 
+    if (Test-Path $appDir) { 
+        Remove-Item -Path $appDir -Recurse -Force
+        Write-Log "Deleted: $appDir" 
     }
 
     $meta = Join-Path $metadataRoot "$($packageConfig.name).json"

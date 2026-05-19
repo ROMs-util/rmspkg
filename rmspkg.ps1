@@ -144,7 +144,7 @@ switch ($command) {
             $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$noShim
 
             $packageId = if ($packageConfig.version) { "$($packageConfig.name)-$($packageConfig.version)" } else { $packageConfig.name }
-            $foundExecutables = Find-PackageExecutables -InstallDirectory $installedPath
+            $foundExecutables = Find-PackageExecutables -AppDirectory $installedPath
             
             # Identify the primary executable (the one the user actually calls)
             $primaryExecutable = Join-Path $installedPath "$($packageConfig.commandName).bat"
@@ -156,7 +156,6 @@ switch ($command) {
             $installationReport = [PSCustomObject]@{
                 packageId = $packageId
                 commandName = $packageConfig.commandName
-                installDir = $installedPath
                 primaryExecutable = $primaryExecutable
                 executables = $foundExecutables
             }
