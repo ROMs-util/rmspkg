@@ -30,8 +30,16 @@ function Write-Log {
 # ---------------------------------------------
 function Check-RomsDependencies {
     param($dependencies)
-    if ($null -eq $dependencies -or $null -eq $dependencies.roms) { return }
-    foreach ($depName in $dependencies.roms) {
+    if ($null -eq $dependencies) { return }
+    
+    $depNames = @()
+    if ($dependencies -is [System.Array]) {
+        $depNames = $dependencies
+    } elseif ($dependencies.roms -is [System.Array]) {
+        $depNames = $dependencies.roms
+    }
+
+    foreach ($depName in $depNames) {
         if (-not (Test-Path (Join-Path $metadataRoot "$depName.json"))) {
             throw "Missing required package dependency: '$depName'. Please install it first."
         }
