@@ -59,6 +59,11 @@ function Invoke-Installation {
         # Ensure absolute path is persisted
         $final.executable = $exec
         
+        # Industrial Strength: Audit Trail (Persist hash if provided by manager)
+        if ($global:ROMs_STAGED_HASH) {
+            $final | Add-Member -MemberType NoteProperty -Name "sha256" -Value $global:ROMs_STAGED_HASH -Force
+        }
+
         if ($global:globalArtifacts.Count -gt 0) { 
             $final | Add-Member -MemberType NoteProperty -Name "artifacts" -Value $global:globalArtifacts -Force 
         }
