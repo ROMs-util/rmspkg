@@ -12,20 +12,21 @@ function Invoke-Uninstallation {
 
     Write-Log "Starting uninstallation for $commandName..."
     
-    # [FIX]: Support manifest 'hooks' object (preUninstall)
-    $hookName = $packageConfig.hooks.preUninstall
-    if (!$hookName -and (Test-Path (Join-Path $appDir "rms_uninstall.ps1"))) { $hookName = "rms_uninstall.ps1" }
+    # 1. Pre-Uninstall Hook
+    $preRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "preUninstall"
+    $preAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
+    Invoke-RomsHook -Path $preAbs -ContextName "preUninstall" | Out-Null
 
-    if ($hookName) {
-        $hookPath = Join-Path $appDir $hookName
-        if (Test-Path $hookPath) {
-            Write-Log "Running uninstall hook: $hookName"
-            & pwsh -File $hookPath 2>&1 | ForEach-Object { Write-Log "  [HOOK] $_" }
-            # Uninstallation hooks are usually non-fatal, but we log the exit code
-            if ($LASTEXITCODE -ne 0) {
-                Write-Log "WARN: Uninstall hook '$hookName' failed with exit code $LASTEXITCODE." "WARN"
-            }
-        }
+    # 2. Stage Post-Uninstall Hook (Industrial Strength Persistence)
+    # We must copy the postUninstall script to a temp location because $appDir will be deleted.
+    $postRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "postUninstall"
+    $postAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $postRel))
+    
+    $stagedPostHook = $null
+    if (Test-Path $postAbs) {
+        $stagedPostHook = Join-Path $env:TEMP "roms_postun_$($packageConfig.name)_$([guid]::NewGuid().ToString().Substring(0,8)).ps1"
+        Copy-Item $postAbs $stagedPostHook -Force
+        Write-Log "Staged postUninstall hook to temp."
     }
 
     # Surgical Artifact Removal
@@ -41,6 +42,12 @@ function Invoke-Uninstallation {
     if (Test-Path $appDir) { 
         Remove-Item -Path $appDir -Recurse -Force
         Write-Log "Deleted: $appDir" 
+    }
+
+    # 3. Post-Uninstall Hook (Execution)
+    if ($stagedPostHook) {
+        Invoke-RomsHook -Path $stagedPostHook -ContextName "postUninstall" | Out-Null
+        Remove-Item $stagedPostHook -Force # Cleanup temp script
     }
 
     $meta = Join-Path $metadataRoot "$($packageConfig.name).json"

@@ -31,6 +31,7 @@ if (-not (Test-Path $libPath)) {
 . (Join-Path $libPath "core.ps1")
 . (Join-Path $libPath "help.ps1")
 . (Join-Path $libPath "environment.ps1")
+. (Join-Path $libPath "hooks.ps1")
 . (Join-Path $libPath "installer.ps1")
 . (Join-Path $libPath "uninstaller.ps1")
 

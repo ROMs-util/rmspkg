@@ -11,6 +11,33 @@ function Invoke-Installation {
     try {
         Check-RomsDependencies $packageConfig.dependencies
 
+        # 1. Surgical Hook Extraction (Pre-Check)
+        if ($isRmsPackage) {
+            if (-not (Test-Path $appDir)) { New-Item -ItemType Directory -Path $appDir -Force | Out-Null; $createdDir = $true; $rollbackNeeded = $true }
+            
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
+            try {
+                $preRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "preInstall"
+                # Normalize slashes for ZIP lookup
+                $preRelNormalized = $preRel.Replace("/", "\")
+                $e = $zip.Entries | Where-Object { $_.FullName -eq $preRelNormalized }
+                if ($e) {
+                    $d = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
+                    $p = Split-Path $d
+                    if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
+                    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
+                    Write-Log "Pre-extracted hook: $preRel"
+                }
+            } finally { $zip.Dispose() }
+        }
+
+        # 2. Pre-Install Hook
+        $preRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "preInstall"
+        $preAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
+        $res = Invoke-RomsHook -Path $preAbs -ContextName "preInstall"
+        if ($res -and $res -ne 0) { throw "preInstall hook failed." }
+
         if (-not (Test-Path $appDir)) {
             New-Item -ItemType Directory -Path $appDir -ErrorAction Stop | Out-Null
             $createdDir = $true; $rollbackNeeded = $true
@@ -21,14 +48,19 @@ function Invoke-Installation {
             Add-Type -AssemblyName System.IO.Compression.FileSystem
             $zip = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
             try {
+                # [FEATURE]: Industrial Strength Extraction (Auto-include hooks)
                 $pack = @($packageConfig.files) + @("roms_package.json")
-                # [FIX]: Ensure manifest-defined hook is extracted
-                if ($packageConfig.hooks.postInstall) { $pack += $packageConfig.hooks.postInstall }
-                
+                $allHookTypes = @("preInstall", "postInstall", "preUninstall", "postUninstall")
+                foreach ($ht in $allHookTypes) {
+                    $pack += Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType $ht
+                }
+
                 foreach ($f in ($pack | Select-Object -Unique)) {
-                    $e = $zip.Entries | Where-Object { $_.FullName -eq $f }
+                    # Normalize slashes for ZIP lookup
+                    $fNormalized = $f.Replace("/", "\")
+                    $e = $zip.Entries | Where-Object { $_.FullName -eq $fNormalized }
                     if ($e) {
-                        $d = Join-Path $appDir $f
+                        $d = [System.IO.Path]::GetFullPath((Join-Path $appDir $f))
                         $p = Split-Path $d
                         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
                         [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
@@ -73,20 +105,11 @@ function Invoke-Installation {
         $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $metadataRoot "$($packageConfig.name).json") -Encoding utf8
         if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." }
 
-        # [FIX]: Support manifest 'hooks' object + check $LASTEXITCODE
-        $hookName = $packageConfig.hooks.postInstall
-        if (!$hookName -and (Test-Path (Join-Path $appDir "rms_install.ps1"))) { $hookName = "rms_install.ps1" }
-
-        if ($hookName) {
-            $hookPath = Join-Path $appDir $hookName
-            if (Test-Path $hookPath) {
-                Write-Log "Running install hook: $hookName"
-                & pwsh -File $hookPath 2>&1 | ForEach-Object { Write-Log "  [HOOK] $_" }
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Install hook '$hookName' failed with exit code $LASTEXITCODE."
-                }
-            }
-        }
+        # 2. Post-Install Hook
+        $postRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "postInstall"
+        $postAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $postRel))
+        $res = Invoke-RomsHook -Path $postAbs -ContextName "postInstall"
+        if ($res -and $res -ne 0) { throw "postInstall hook failed." }
 
         $rollbackNeeded = $false
         return $appDir # Return the installation directory
