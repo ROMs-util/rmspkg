@@ -22,7 +22,10 @@ function Invoke-Installation {
             $zip = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
             try {
                 $pack = @($packageConfig.files) + @("roms_package.json")
-                foreach ($f in $pack) {
+                # [FIX]: Ensure manifest-defined hook is extracted
+                if ($packageConfig.hooks.postInstall) { $pack += $packageConfig.hooks.postInstall }
+                
+                foreach ($f in ($pack | Select-Object -Unique)) {
                     $e = $zip.Entries | Where-Object { $_.FullName -eq $f }
                     if ($e) {
                         $d = Join-Path $appDir $f
@@ -70,11 +73,19 @@ function Invoke-Installation {
         $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $metadataRoot "$($packageConfig.name).json") -Encoding utf8
         if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." }
 
-        # Post Hook
-        $post = Join-Path $appDir "rms_install.ps1"
-        if (Test-Path $post) { 
-            Write-Log "Running install hook..."
-            & $post 2>&1 | ForEach-Object { Write-Log "  [HOOK] $_" } 
+        # [FIX]: Support manifest 'hooks' object + check $LASTEXITCODE
+        $hookName = $packageConfig.hooks.postInstall
+        if (!$hookName -and (Test-Path (Join-Path $appDir "rms_install.ps1"))) { $hookName = "rms_install.ps1" }
+
+        if ($hookName) {
+            $hookPath = Join-Path $appDir $hookName
+            if (Test-Path $hookPath) {
+                Write-Log "Running install hook: $hookName"
+                & pwsh -File $hookPath 2>&1 | ForEach-Object { Write-Log "  [HOOK] $_" }
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Install hook '$hookName' failed with exit code $LASTEXITCODE."
+                }
+            }
         }
 
         $rollbackNeeded = $false
@@ -83,7 +94,9 @@ function Invoke-Installation {
         Write-Log "ERROR: $_" "ERROR"
         if ($rollbackNeeded) {
             if ($createdDir) { Remove-Item $appDir -Recurse -Force }
-            $m = Join-Path $metadataRoot "$commandName.json"; if (Test-Path $m) { Remove-Item $m -Force }
+            # [FIX]: Use package name for metadata cleanup, not commandName
+            $m = Join-Path $metadataRoot "$($packageConfig.name).json"
+            if (Test-Path $m) { Remove-Item $m -Force }
         }
         throw $_
     }

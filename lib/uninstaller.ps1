@@ -11,10 +11,21 @@ function Invoke-Uninstallation {
     }
 
     Write-Log "Starting uninstallation for $commandName..."
-    $hook = Join-Path $appDir "rms_uninstall.ps1"
-    if (Test-Path $hook) { 
-        Write-Log "Running uninstall hook..."
-        & $hook 2>&1 | ForEach-Object { Write-Log "  [HOOK] $_" } 
+    
+    # [FIX]: Support manifest 'hooks' object (preUninstall)
+    $hookName = $packageConfig.hooks.preUninstall
+    if (!$hookName -and (Test-Path (Join-Path $appDir "rms_uninstall.ps1"))) { $hookName = "rms_uninstall.ps1" }
+
+    if ($hookName) {
+        $hookPath = Join-Path $appDir $hookName
+        if (Test-Path $hookPath) {
+            Write-Log "Running uninstall hook: $hookName"
+            & pwsh -File $hookPath 2>&1 | ForEach-Object { Write-Log "  [HOOK] $_" }
+            # Uninstallation hooks are usually non-fatal, but we log the exit code
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "WARN: Uninstall hook '$hookName' failed with exit code $LASTEXITCODE." "WARN"
+            }
+        }
     }
 
     # Surgical Artifact Removal
