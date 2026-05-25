@@ -142,9 +142,11 @@ switch ($command) {
         Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
         Write-Host "[SUCCESS] $commandName uninstalled." -ForegroundColor Green
         Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
+        exit 0
     }
     "bootstrap" {
         # Bootstrap logic is handled in Invoke-SelfBootstrap above
+        exit 0
     }
     "install" {
         $logFile = Join-Path $logRoot "$($packageConfig.name).log"
@@ -173,6 +175,7 @@ switch ($command) {
             Write-Host "[SUCCESS] $commandName installed." -ForegroundColor Green
             Write-Host "          Log: $logFile"
             Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
+            exit 0
         } catch {
             Write-Error "[FATAL] Installation failed. See log: $logFile"
             exit 1
