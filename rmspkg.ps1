@@ -1,36 +1,40 @@
-[CmdletBinding()]
-param(
-    [Parameter(Position=0)]
-    [string]$Command,
-    [Parameter(Position=1)]
-    [string]$InputPath,
-    
-    # Global flags
-    [Alias("y")][switch]$yes,
-
-    # Internal parameters for orchestration
-    [switch]$bootstrap,
-    [switch]$quiet,
-    [switch]$noShim
-)
+# rmspkg.ps1 - The ROMs-util Standalone Engine
+# Usage: rmspkg <command> [inputPath] [flags]
 
 # ---------------------------------------------
-# ARGUMENT PARSING (Modern Standard)
+# ARGUMENT PARSING (Industrial Strength)
 # ---------------------------------------------
-$global:AutoConfirm = $yes -or ($args -contains "-y") -or ($args -contains "--yes")
-$global:Verbose     = $PSBoundParameters.Verbose -or ($args -contains "-v") -or ($args -contains "--verbose")
+# Separate Global Flags (Options) from Positional Data (Command/Path)
+$flags = $args | Where-Object { $_ -is [string] -and $_.StartsWith("-") }
+[array]$data = $args | Where-Object { -not ($_ -is [string] -and $_.StartsWith("-")) }
+
+# Command-Based Actions: Plain words (Design Standard)
+$command   = $data[0]
+$inputPath = $data[1]
+
+# Global Flag Pattern (Design Standard: $args -contains)
+$global:AutoConfirm = ($flags -contains "-y") -or ($flags -contains "--yes")
+$global:Verbose     = ($flags -contains "-v") -or ($flags -contains "--verbose")
+$global:NoShim      = ($flags -contains "--no-shim")
+
+# Bootstrap Detection (The Handshake)
+$global:IsBootstrap = ($command -eq "bootstrap") -or ($flags -contains "-b") -or ($flags -contains "--bootstrap")
 
 # ---------------------------------------------
-# LOAD MODULES
+# LOAD MODULES (Industrial Strength Loading Sequence)
 # ---------------------------------------------
 $libPath = Join-Path $PSScriptRoot "lib"
 if (-not (Test-Path $libPath)) {
     Write-Error "[FATAL] Library folder not found at $libPath"
     exit 1
 }
+
+# 1. Foundations
 . (Join-Path $libPath "core.ps1")
 . (Join-Path $libPath "help.ps1")
 . (Join-Path $libPath "environment.ps1")
+
+# 2. Logic
 . (Join-Path $libPath "hooks.ps1")
 . (Join-Path $libPath "installer.ps1")
 . (Join-Path $libPath "uninstaller.ps1")
@@ -39,7 +43,7 @@ if (-not (Test-Path $libPath)) {
 # COMMAND ROUTING
 # ---------------------------------------------
 # Default to help if nothing provided or help requested
-if (-not $command -or $command -in @("help", "h", "?")) {
+if (-not $global:IsBootstrap -and (-not $command -or $command -in @("help", "h", "?"))) {
     $invokedAs = if ($PSScriptRoot -notlike "*C:\roms*") { ".\rmspkg.bat" } else { "rmspkg" }
     Show-Help -invokedAs $invokedAs
     exit 0
@@ -48,56 +52,58 @@ if (-not $command -or $command -in @("help", "h", "?")) {
 # ---------------------------------------------
 # IDENTITY DISCOVERY (The Brain)
 # ---------------------------------------------
-
-
-# ---------------------------------------------
-# IDENTITY DISCOVERY (The Brain)
-# ---------------------------------------------
 $packageConfig = $null
 $isRmsPackage  = $false
 $resolvedPath  = $null
 
-if ($inputPath) {
-    # 1. Check if it's a direct file path
-    if (Test-Path $inputPath -PathType Leaf) {
-        $resolvedPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $inputPath))
-        
-        if ($resolvedPath.EndsWith(".rms", [System.StringComparison]::OrdinalIgnoreCase)) {
-            $isRmsPackage = $true
-            # Peek inside ZIP for manifest
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            try {
-                $zip = [System.IO.Compression.ZipFile]::OpenRead($resolvedPath)
-                $entry = $zip.Entries | Where-Object { $_.FullName -eq "roms_package.json" }
-                if ($entry) {
-                    $temp = Join-Path $env:TEMP "rmspkg_peek_$([guid]::NewGuid().ToString()).json"
-                    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $temp)
-                    $packageConfig = Get-Content $temp -Raw | ConvertFrom-Json
-                    Remove-Item $temp
-                }
-                $zip.Dispose()
-            } catch { if ($zip) { $zip.Dispose() } }
-        } elseif ($resolvedPath.EndsWith(".json", [System.StringComparison]::OrdinalIgnoreCase)) {
-            $packageConfig = Get-Content $resolvedPath -Raw | ConvertFrom-Json
+# SPECIAL CASE: Bootstrap handles its own identity
+if ($global:IsBootstrap) {
+    $localJson = Join-Path $PSScriptRoot "roms_package.json"
+    if (Test-Path $localJson) { $packageConfig = Get-Content $localJson -Raw | ConvertFrom-Json }
+}
+else {
+    if ($inputPath) {
+        # 1. Check if it's a direct file path
+        if (Test-Path $inputPath -PathType Leaf) {
+            $resolvedPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $inputPath))
+            
+            if ($resolvedPath.EndsWith(".rms", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $isRmsPackage = $true
+                # Industrial Strength: Peek inside ZIP for manifest using native .NET
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                try {
+                    $zip = [System.IO.Compression.ZipFile]::OpenRead($resolvedPath)
+                    $entry = $zip.Entries | Where-Object { $_.FullName -eq "roms_package.json" }
+                    if ($entry) {
+                        $temp = Join-Path $env:TEMP "rmspkg_peek_$([guid]::NewGuid().ToString()).json"
+                        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $temp)
+                        $packageConfig = Get-Content $temp -Raw | ConvertFrom-Json
+                        Remove-Item $temp
+                    }
+                    $zip.Dispose()
+                } catch { if ($zip) { $zip.Dispose() } }
+            } elseif ($resolvedPath.EndsWith(".json", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $packageConfig = Get-Content $resolvedPath -Raw | ConvertFrom-Json
+            }
+        } 
+        # 2. Check if it's a directory
+        elseif (Test-Path $inputPath -PathType Container) {
+            $resolvedPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $inputPath))
+            $localJson = Join-Path $resolvedPath "roms_package.json"
+            if (Test-Path $localJson) { $packageConfig = Get-Content $localJson -Raw | ConvertFrom-Json }
         }
-    } 
-    # 2. Check if it's a directory
-    elseif (Test-Path $inputPath -PathType Container) {
-        $resolvedPath = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $inputPath))
-        $localJson = Join-Path $resolvedPath "roms_package.json"
+        # 3. Assume it's an App Name (Registry Lookup)
+        else {
+            $metaJson = Join-Path $metadataRoot "$inputPath.json"
+            if (Test-Path $metaJson) {
+                $packageConfig = Get-Content $metaJson -Raw | ConvertFrom-Json
+            }
+        }
+    } elseif ($command -eq "uninstall") {
+        # Naked uninstall, check current directory
+        $localJson = Join-Path (Get-Location).Path "roms_package.json"
         if (Test-Path $localJson) { $packageConfig = Get-Content $localJson -Raw | ConvertFrom-Json }
     }
-    # 3. Assume it's an App Name (Registry Lookup)
-    else {
-        $metaJson = Join-Path $metadataRoot "$inputPath.json"
-        if (Test-Path $metaJson) {
-            $packageConfig = Get-Content $metaJson -Raw | ConvertFrom-Json
-        }
-    }
-} elseif ($command -eq "uninstall") {
-    # Naked uninstall, check current directory
-    $localJson = Join-Path (Get-Location).Path "roms_package.json"
-    if (Test-Path $localJson) { $packageConfig = Get-Content $localJson -Raw | ConvertFrom-Json }
 }
 
 if (-not $packageConfig) {
@@ -108,10 +114,10 @@ if (-not $packageConfig) {
 $commandName = $packageConfig.commandName
 
 # ---------------------------------------------
-# ADVICE & ELEVATION (DEPRECATED: Manager handles elevation)
+# ADVICE (UX)
 # ---------------------------------------------
-$finalInstallEngine = $bootstrap
-if (-not $quiet -and -not (Test-Path $engineDir) -and -not (Test-Path $engineShim) -and ($PSScriptRoot -ne $engineDir)) {
+$finalInstallEngine = $global:IsBootstrap
+if (-not $global:AutoConfirm -and -not $global:IsQuiet -and -not (Test-Path $engineDir) -and -not (Test-Path $engineShim) -and ($PSScriptRoot -ne $engineDir)) {
     Write-Host "`nADVICE: rmspkg is running in portable mode." -ForegroundColor Yellow
     Write-Host "Would you like to install it permanently to $engineDir?"
     Write-Host "This will also register 'rmspkg' as a global command."
@@ -122,8 +128,7 @@ if (-not $quiet -and -not (Test-Path $engineDir) -and -not (Test-Path $engineShi
 # ---------------------------------------------
 # EXECUTION
 # ---------------------------------------------
-
-# Initialize System
+# Initialize System Folders
 @($systemRoot, $metadataRoot, $logRoot, $binRoot) | ForEach-Object { if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ | Out-Null; if ($_ -eq $metadataRoot) { (Get-Item $_).Attributes = "Hidden" } } }
 
 # Environment Setup
@@ -134,24 +139,26 @@ Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScri
 switch ($command) {
     "uninstall" {
         Invoke-Uninstallation -packageConfig $packageConfig
-        Write-Host "`n-----------------------------------------------------"
-        Write-Host "[SUCCESS] $commandName uninstalled."
-        Write-Host "-----------------------------------------------------`n"
+        Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
+        Write-Host "[SUCCESS] $commandName uninstalled." -ForegroundColor Green
+        Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
+    }
+    "bootstrap" {
+        # Bootstrap logic is handled in Invoke-SelfBootstrap above
     }
     "install" {
         $logFile = Join-Path $logRoot "$($packageConfig.name).log"
         Write-Log "Starting installation for $commandName"
         try {
-            $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$noShim
+            $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$global:NoShim
 
             $packageId = if ($packageConfig.version) { "$($packageConfig.name)-$($packageConfig.version)" } else { $packageConfig.name }
             $foundExecutables = Find-PackageExecutables -AppDirectory $installedPath
             
-            # Identify the primary executable (the one the user actually calls)
+            # Identify the primary executable
             $primaryExecutable = Join-Path $installedPath "$($packageConfig.commandName).bat"
             if (-not (Test-Path $primaryExecutable)) { $primaryExecutable = Join-Path $installedPath "$($packageConfig.commandName).exe" }
             if (-not (Test-Path $primaryExecutable)) { $primaryExecutable = Join-Path $installedPath "$($packageConfig.commandName).ps1" }
-            # Fallback to the first found executable if the named one doesn't exist
             if (-not (Test-Path $primaryExecutable) -and $foundExecutables.Count -gt 0) { $primaryExecutable = $foundExecutables[0] }
 
             $installationReport = [PSCustomObject]@{
@@ -162,10 +169,10 @@ switch ($command) {
             }
             $installationReport | ConvertTo-Json -Depth 10 -Compress
 
-            Write-Host "`n-----------------------------------------------------"
-            Write-Host "[SUCCESS] $commandName installed."
+            Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
+            Write-Host "[SUCCESS] $commandName installed." -ForegroundColor Green
             Write-Host "          Log: $logFile"
-            Write-Host "-----------------------------------------------------`n"
+            Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
         } catch {
             Write-Error "[FATAL] Installation failed. See log: $logFile"
             exit 1

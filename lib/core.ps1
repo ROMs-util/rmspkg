@@ -19,7 +19,9 @@ function Write-Log {
     param([string]$message, [string]$level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $logEntry = "[$timestamp] [$level] $message"
+    
     Write-Host $logEntry
+
     if ($script:logFile) {
         $logEntry | Out-File -FilePath $script:logFile -Append -Encoding utf8
     }
