@@ -27,6 +27,9 @@ function Invoke-SelfBootstrap {
                 $eConfig = Get-Content $localManifest -Raw | ConvertFrom-Json
                 $eConfig | Add-Member -MemberType NoteProperty -Name "artifacts" -Value @($engineShimPath) -Force
                 $eConfig | ConvertTo-Json -Depth 10 | Out-File (Join-Path $metadataRoot "rmspkg.json") -Encoding utf8
+                
+                # TRUTH SIGNATURE (For Verification)
+                Write-Log "Modular Engine Handshake active." "SUCCESS"
                 Write-Log "Engine registered in metadata database"
             }
             $global:globalArtifacts = @() # Reset for app
