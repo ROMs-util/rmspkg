@@ -33,6 +33,7 @@ if (-not (Test-Path $libPath)) {
 . (Join-Path $libPath "core.ps1")
 . (Join-Path $libPath "help.ps1")
 . (Join-Path $libPath "environment.ps1")
+. (Join-Path $libPath "bootstrap.ps1")  # Self-Registration Logic
 
 # 2. Logic
 . (Join-Path $libPath "hooks.ps1")
