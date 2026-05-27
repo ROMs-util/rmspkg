@@ -29,10 +29,13 @@ function Invoke-Uninstallation {
         Write-Log "Staged postUninstall hook to temp."
     }
 
-    # Surgical Artifact Removal
+    # Surgical Artifact Removal 
     if ($packageConfig.artifacts) {
         foreach ($art in $packageConfig.artifacts) {
-            if (Test-Path $art -PathType Leaf) { 
+            if ($art.StartsWith("env:")) {
+                $envKey = $art.Substring(4)
+                Invoke-RomsEnvironmentRemove -Key $envKey
+            } elseif (Test-Path $art -PathType Leaf) { 
                 Remove-Item $art -Force
                 Write-Log "Removed artifact: $art" 
             }

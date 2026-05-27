@@ -139,6 +139,8 @@ Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScri
 # Action Routing
 switch ($command) {
     "uninstall" {
+        $script:logFile = Join-Path $logRoot "$($packageConfig.name).log"
+        Write-Log "Starting uninstallation for $commandName"
         Invoke-Uninstallation -packageConfig $packageConfig
         Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
         Write-Host "[SUCCESS] $commandName uninstalled." -ForegroundColor Green

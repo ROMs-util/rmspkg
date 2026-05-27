@@ -18,3 +18,34 @@ function Update-EnvironmentPath {
         Write-Host "[PATH] Added $binRoot to User PATH. Restart terminal to apply."
     }
 }
+
+function Invoke-RomsEnvironmentSet {
+    param(
+        [Parameter(Mandatory=$true)][PSCustomObject]$Variables,
+        [string]$Scope = "Machine"
+    )
+
+    foreach ($prop in $Variables.PSObject.Properties) {
+        $key = $prop.Name
+        $val = $prop.Value
+        Write-Log "Setting Environment Variable: $key = $val ($Scope)" "INFO"
+        [System.Environment]::SetEnvironmentVariable($key, $val, $Scope)
+        
+        # Track as environment artifact for clean uninstallation
+        $artifactKey = "env:$key"
+        if ($global:globalArtifacts -notcontains $artifactKey) { 
+            $global:globalArtifacts += $artifactKey 
+        }
+    }
+}
+
+function Invoke-RomsEnvironmentRemove {
+    param(
+        [Parameter(Mandatory=$true)][string]$Key,
+        [string]$Scope = "Machine"
+    )
+
+    Write-Log "Removing Environment Variable: $Key ($Scope)" "INFO"
+    [System.Environment]::SetEnvironmentVariable($Key, $null, $Scope)
+}
+

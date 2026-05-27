@@ -102,6 +102,19 @@ function Invoke-Installation {
         if ($global:globalArtifacts.Count -gt 0) { 
             $final | Add-Member -MemberType NoteProperty -Name "artifacts" -Value $global:globalArtifacts -Force 
         }
+
+        # Apply Environment Variables (Industrial Strength)
+        if ($packageConfig.environment_variables) {
+            Invoke-RomsEnvironmentSet -Variables $packageConfig.environment_variables
+        }
+
+        # Re-sync artifacts if they were modified by Invoke-RomsEnvironmentSet
+        if ($null -eq $final.artifacts) {
+            $final | Add-Member -MemberType NoteProperty -Name "artifacts" -Value $global:globalArtifacts -Force
+        } else {
+            $final.artifacts = $global:globalArtifacts
+        }
+
         $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $metadataRoot "$($packageConfig.name).json") -Encoding utf8
         if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." }
 
