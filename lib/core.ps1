@@ -42,7 +42,9 @@ function Check-RomsDependencies {
     }
 
     foreach ($depName in $depNames) {
-        if (-not (Test-Path (Join-Path $metadataRoot "$depName.json"))) {
+        # Strip version constraint for registry check (Manager handles resolution)
+        $cleanName = $depName.Split(':')[0]
+        if (-not (Test-Path (Join-Path $metadataRoot "$cleanName.json"))) {
             throw "Missing required package dependency: '$depName'. Please install it first."
         }
         Write-Log "Verified dependency: $depName"
