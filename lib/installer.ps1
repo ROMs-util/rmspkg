@@ -6,15 +6,22 @@ function Invoke-Installation {
     $commandName = $packageConfig.commandName
     
     # Robustness: Force absolute, name-based installation paths (Enforce Standard)
-    $appDir = [System.IO.Path]::GetFullPath((Join-Path $systemRoot $packageConfig.name))
+    $appDir = [System.IO.Path]::GetFullPath((Join-Path $global:ROMS_ROOT $packageConfig.name))
 
     try {
         Check-RomsDependencies $packageConfig.dependencies
 
         # 1. Surgical Hook Extraction (Pre-Check)
+        if (-not (Test-Path $appDir)) { 
+            Write-Log "Tracing directory initialization: $appDir" "TRACE"
+            New-Item -ItemType Directory -Path $appDir -Force | Out-Null
+            $createdDir = $true
+            $rollbackNeeded = $true 
+            Write-Log "Created directory: $appDir" "DEBUG"
+        }
+
         if ($isRmsPackage) {
-            if (-not (Test-Path $appDir)) { New-Item -ItemType Directory -Path $appDir -Force | Out-Null; $createdDir = $true; $rollbackNeeded = $true }
-            
+            Write-Log "Tracing hook discovery in ZIP..." "TRACE"
             Add-Type -AssemblyName System.IO.Compression.FileSystem
             $zip = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
             try {
@@ -23,11 +30,12 @@ function Invoke-Installation {
                 $preRelNormalized = $preRel.Replace("/", "\")
                 $e = $zip.Entries | Where-Object { $_.FullName -eq $preRelNormalized }
                 if ($e) {
+                    Write-Log "Tracing preInstall hook extraction: $preRel" "TRACE"
                     $d = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
                     $p = Split-Path $d
                     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
                     [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
-                    Write-Log "Pre-extracted hook: $preRel"
+                    Write-Log "Pre-extracted hook: $preRel" "DEBUG"
                 }
             } finally { $zip.Dispose() }
         }
@@ -35,13 +43,10 @@ function Invoke-Installation {
         # 2. Pre-Install Hook
         $preRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "preInstall"
         $preAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
-        $res = Invoke-RomsHook -Path $preAbs -ContextName "preInstall"
-        if ($res -and $res -ne 0) { throw "preInstall hook failed." }
-
-        if (-not (Test-Path $appDir)) {
-            New-Item -ItemType Directory -Path $appDir -ErrorAction Stop | Out-Null
-            $createdDir = $true; $rollbackNeeded = $true
-            Write-Log "Created directory: $appDir"
+        if (Test-Path $preAbs) {
+            Write-Log "Tracing hook execution: $preRel" "TRACE"
+            $res = Invoke-RomsHook -Path $preAbs -ContextName "preInstall"
+            if ($res -and $res -ne 0) { throw "preInstall hook failed." }
         }
 
         if ($isRmsPackage) {
@@ -60,18 +65,26 @@ function Invoke-Installation {
                     $fNormalized = $f.Replace("/", "\")
                     $e = $zip.Entries | Where-Object { $_.FullName -eq $fNormalized }
                     if ($e) {
+                        Write-Log "Tracing extraction: $($fNormalized)" "TRACE"
                         $d = [System.IO.Path]::GetFullPath((Join-Path $appDir $f))
                         $p = Split-Path $d
                         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
                         [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
-                        Write-Log "Extracted: $f"
+                        Write-Log "Extracted: $f" "DEBUG"
                     }
                 }
             } finally { $zip.Dispose() }
         } else {
             foreach ($f in (@($packageConfig.files) + @("roms_package.json"))) {
                 $s = Join-Path $sourceDir $f; $d = Join-Path $appDir $f
-                if ($s -ne $d) { Copy-Item $s $d -Force -ErrorAction Stop; Write-Log "Copied: $f" }
+                if ($s -ne $d) { 
+                    $destParent = Split-Path $d
+                    if (-not (Test-Path $destParent)) { New-Item -ItemType Directory -Path $destParent -Force | Out-Null }
+                    
+                    Write-Log "Tracing copy: $f" "TRACE"
+                    Copy-Item $s $d -Force -ErrorAction Stop
+                    Write-Log "Copied: $f" "DEBUG"
+                }
             }
         }
 
@@ -115,24 +128,32 @@ function Invoke-Installation {
             $final.artifacts = $global:globalArtifacts
         }
 
-        $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $metadataRoot "$($packageConfig.name).json") -Encoding utf8
-        if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." }
+        $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $global:METADATA_DIR "$($packageConfig.name).json") -Encoding utf8
+        if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." "DEBUG" }
 
         # 2. Post-Install Hook
         $postRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "postInstall"
         $postAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $postRel))
-        $res = Invoke-RomsHook -Path $postAbs -ContextName "postInstall"
-        if ($res -and $res -ne 0) { throw "postInstall hook failed." }
+        if (Test-Path $postAbs) {
+            Write-Log "Tracing hook execution: $postRel" "TRACE"
+            $res = Invoke-RomsHook -Path $postAbs -ContextName "postInstall"
+            if ($res -and $res -ne 0) { throw "postInstall hook failed." }
+        }
 
         $rollbackNeeded = $false
         return $appDir # Return the installation directory
     } catch {
-        Write-Log "ERROR: $_" "ERROR"
+        Write-Log "CRITICAL ERROR: $_" "ERROR"
         if ($rollbackNeeded) {
-            if ($createdDir) { Remove-Item $appDir -Recurse -Force }
-            # [FIX]: Use package name for metadata cleanup, not commandName
-            $m = Join-Path $metadataRoot "$($packageConfig.name).json"
-            if (Test-Path $m) { Remove-Item $m -Force }
+            if ($createdDir) { 
+                Write-Log "Rolling back: Deleting $appDir" "WARN"
+                Remove-Item $appDir -Recurse -Force 
+            }
+            $m = Join-Path $global:METADATA_DIR "$($packageConfig.name).json"
+            if (Test-Path $m) { 
+                Write-Log "Rolling back: Deleting metadata $m" "WARN"
+                Remove-Item $m -Force 
+            }
         }
         throw $_
     }

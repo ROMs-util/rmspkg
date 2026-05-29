@@ -5,8 +5,8 @@
 # ARGUMENT PARSING (Industrial Strength)
 # ---------------------------------------------
 # Separate Global Flags (Options) from Positional Data (Command/Path)
-$flags = $args | Where-Object { $_ -is [string] -and $_.StartsWith("-") }
-[array]$data = $args | Where-Object { -not ($_ -is [string] -and $_.StartsWith("-")) }
+$flags = @($args | Where-Object { $_ -is [string] -and $_.StartsWith("-") })
+[array]$data = @($args | Where-Object { -not ($_ -is [string] -and $_.StartsWith("-")) })
 
 # Command-Based Actions: Plain words (Design Standard)
 $command   = $data[0]
@@ -14,11 +14,19 @@ $inputPath = $data[1]
 
 # Global Flag Pattern (Design Standard: $args -contains)
 $global:AutoConfirm = ($flags -contains "-y") -or ($flags -contains "--yes")
-$global:Verbose     = ($flags -contains "-v") -or ($flags -contains "--verbose")
 $global:NoShim      = ($flags -contains "--no-shim")
 
+# Multi-Level Verbosity Parsing
+$global:VerboseLevel = 0
+if ($flags -contains "-vvv") { $global:VerboseLevel = 3 }
+elseif ($flags -contains "-vv") { $global:VerboseLevel = 2 }
+elseif ($flags -contains "-v" -or $flags -contains "--verbose") { $global:VerboseLevel = 1 }
+
+# Legacy flag compatibility
+$global:Verbose = ($global:VerboseLevel -gt 0)
+
 # Bootstrap Detection (The Handshake)
-$global:IsBootstrap = ($command -eq "bootstrap") -or ($flags -contains "-b") -or ($flags -contains "--bootstrap")
+$global:IsBootstrap = ($command -eq "bootstrap")
 
 # ---------------------------------------------
 # LOAD MODULES (Industrial Strength Loading Sequence)
@@ -53,6 +61,8 @@ if (-not $global:IsBootstrap -and (-not $command -or $command -in @("help", "h",
 # ---------------------------------------------
 # IDENTITY DISCOVERY (The Brain)
 # ---------------------------------------------
+if ($args) { Write-Log "Raw Args: $($args -join ' ')" "RAW" }
+if ($inputPath) { Write-Log "Input Path: $inputPath" "RAW" }
 $packageConfig = $null
 $isRmsPackage  = $false
 $resolvedPath  = $null
@@ -78,7 +88,9 @@ else {
                     if ($entry) {
                         $temp = Join-Path $env:TEMP "rmspkg_peek_$([guid]::NewGuid().ToString()).json"
                         [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $temp)
-                        $packageConfig = Get-Content $temp -Raw | ConvertFrom-Json
+                        $rawJson = Get-Content $temp -Raw
+                        Write-Log "Raw Manifest Dump: $rawJson" "RAW"
+                        $packageConfig = $rawJson | ConvertFrom-Json
                         Remove-Item $temp
                     }
                     $zip.Dispose()
@@ -95,7 +107,7 @@ else {
         }
         # 3. Assume it's an App Name (Registry Lookup)
         else {
-            $metaJson = Join-Path $metadataRoot "$inputPath.json"
+            $metaJson = Join-Path $global:METADATA_DIR "$inputPath.json"
             if (Test-Path $metaJson) {
                 $packageConfig = Get-Content $metaJson -Raw | ConvertFrom-Json
             }
@@ -118,28 +130,29 @@ $commandName = $packageConfig.commandName
 # ADVICE (UX)
 # ---------------------------------------------
 $finalInstallEngine = $global:IsBootstrap
-if (-not $global:AutoConfirm -and -not $global:IsQuiet -and -not (Test-Path $engineDir) -and -not (Test-Path $engineShim) -and ($PSScriptRoot -ne $engineDir)) {
+if (-not $global:AutoConfirm -and -not $global:IsQuiet -and -not (Test-Path $global:ENGINE_DIR) -and -not (Test-Path $global:ENGINE_BIN) -and ($PSScriptRoot -ne $global:ENGINE_DIR)) {
     Write-Host "`nADVICE: rmspkg is running in portable mode." -ForegroundColor Yellow
-    Write-Host "Would you like to install it permanently to $engineDir?"
+    Write-Host "Would you like to install it permanently to $global:ENGINE_DIR?"
     Write-Host "This will also register 'rmspkg' as a global command."
     $choice = Read-Host "Install rmspkg globally? (y/n)"
     if ($choice.Trim().ToLower() -eq "y") { $finalInstallEngine = $true }
 }
 
+
 # ---------------------------------------------
 # EXECUTION
 # ---------------------------------------------
 # Initialize System Folders
-@($systemRoot, $metadataRoot, $logRoot, $binRoot) | ForEach-Object { if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ | Out-Null; if ($_ -eq $metadataRoot) { (Get-Item $_).Attributes = "Hidden" } } }
+@($global:ROMS_ROOT, $global:METADATA_DIR, $global:LOG_DIR, $global:BIN_DIR) | ForEach-Object { if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ | Out-Null; if ($_ -eq $global:METADATA_DIR) { (Get-Item $_).Attributes = "Hidden" } } }
 
 # Environment Setup
 Update-EnvironmentPath
-Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScriptRoot -engineDir $engineDir -engineShimPath $engineShim
+Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScriptRoot
 
 # Action Routing
 switch ($command) {
     "uninstall" {
-        $script:logFile = Join-Path $logRoot "$($packageConfig.name).log"
+        $script:logFile = Join-Path $global:LOG_DIR "$($packageConfig.name).log"
         Write-Log "Starting uninstallation for $commandName"
         Invoke-Uninstallation -packageConfig $packageConfig
         Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
@@ -152,7 +165,7 @@ switch ($command) {
         exit 0
     }
     "install" {
-        $logFile = Join-Path $logRoot "$($packageConfig.name).log"
+        $script:logFile = Join-Path $global:LOG_DIR "$($packageConfig.name).log"
         Write-Log "Starting installation for $commandName"
         try {
             $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$global:NoShim
@@ -172,15 +185,17 @@ switch ($command) {
                 primaryExecutable = $primaryExecutable
                 executables = $foundExecutables
             }
-            $installationReport | ConvertTo-Json -Depth 10 -Compress
+            $reportJson = $installationReport | ConvertTo-Json -Depth 10 -Compress
+            Write-Log "Raw Installation Report: $reportJson" "RAW"
+            $reportJson # Still output for Manager parsing
 
             Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
             Write-Host "[SUCCESS] $commandName installed." -ForegroundColor Green
-            Write-Host "          Log: $logFile"
+            Write-Host "          Log: $script:logFile"
             Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
             exit 0
         } catch {
-            Write-Error "[FATAL] Installation failed. See log: $logFile"
+            Write-Error "[FATAL] Installation failed. See log: $script:logFile"
             exit 1
         }
     }
