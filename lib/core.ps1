@@ -1,14 +1,16 @@
 # ---------------------------------------------
 # GLOBALS & PATHS (Ecosystem Standard)
 # ---------------------------------------------
-$global:ROMS_ROOT     = "C:\roms"
-$global:METADATA_DIR  = "$global:ROMS_ROOT\.metadata"
-$global:LOG_DIR       = "$global:ROMS_ROOT\logs"
-$global:BIN_DIR       = "$global:ROMS_ROOT\bin"
-$global:MASTER_LOG    = "$global:LOG_DIR\roms.log"
+$global:ROMs_ROOT         = "C:\roms"
+$global:ROMs_METADATA     = "$global:ROMs_ROOT\.metadata"
+$global:ROMs_LOGS         = "$global:ROMs_ROOT\logs"
+$global:ROMs_BIN          = "$global:ROMs_ROOT\bin"
+$global:ROMs_MASTER_LOG   = "$global:ROMs_LOGS\roms.log"
 
-$global:ENGINE_DIR    = Join-Path $global:ROMS_ROOT "rmspkg"
-$global:ENGINE_BIN    = Join-Path $global:BIN_DIR "rmspkg.bat"
+$global:ROMs_ENGINE_DIR   = Join-Path $global:ROMs_ROOT "rmspkg"
+$global:ROMs_ENGINE_BIN   = Join-Path $global:ROMs_BIN "rmspkg.bat"
+
+$global:ROMs_TEMP         = "$global:ROMs_ROOT\temp"
 
 # Global state
 $script:logFile = $null
@@ -27,8 +29,8 @@ function Write-Log {
     # Initialize global verbosity if not set
     if ($null -eq $global:VerboseLevel) { $global:VerboseLevel = 0 }
 
-    if (-not (Test-Path $global:LOG_DIR)) {
-        New-Item -ItemType Directory -Path $global:LOG_DIR -Force | Out-Null
+    if (-not (Test-Path $global:ROMs_LOGS)) {
+        New-Item -ItemType Directory -Path $global:ROMs_LOGS -Force | Out-Null
     }
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -63,7 +65,7 @@ function Write-Log {
 
     # Log to BOTH the master log and the task-specific log if available
     $logFileLine = "[$timestamp] [$Level] [$Source] $fileContent"
-    $targetLogs = @($global:MASTER_LOG)
+    $targetLogs = @($global:ROMs_MASTER_LOG)
     if ($script:logFile) { $targetLogs += $script:logFile }
 
     foreach ($logPath in $targetLogs) {
@@ -126,7 +128,7 @@ function Check-RomsDependencies {
     foreach ($depName in $depNames) {
         # Strip version constraint for registry check (Manager handles resolution)
         $cleanName = $depName.Split(':')[0]
-        if (-not (Test-Path (Join-Path $global:METADATA_DIR "$cleanName.json"))) {
+        if (-not (Test-Path (Join-Path $global:ROMs_METADATA "$cleanName.json"))) {
             throw "Missing required package dependency: '$depName'. Please install it first."
         }
         Write-Log "Verified dependency: $depName" "DEBUG"
@@ -141,7 +143,7 @@ function Confirm-Elevation {
     
     $currentUser = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     if (-not $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Log "Elevation required to modify $global:ROMS_ROOT. Requesting Administrator privileges..." "INFO"
+        Write-Log "Elevation required to modify $global:ROMs_ROOT. Requesting Administrator privileges..." "INFO"
         
         $argString = "-NoExit -ExecutionPolicy Bypass -File `"$cmdPath`""
         if ($params.command) { $argString += " $($params.command)" }

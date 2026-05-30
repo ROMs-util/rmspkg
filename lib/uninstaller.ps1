@@ -3,7 +3,7 @@ function Invoke-Uninstallation {
 
     $commandName = $packageConfig.commandName
     # Robustness: Force name-based uninstallation path (Enforce Standard)
-    $appDir = [System.IO.Path]::GetFullPath((Join-Path $global:ROMS_ROOT $packageConfig.name))
+    $appDir = [System.IO.Path]::GetFullPath((Join-Path $global:ROMs_ROOT $packageConfig.name))
 
     if (-not $global:AutoConfirm) {
         $confirm = Read-Host "This will delete $appDir and all tracked shims. Proceed? (y/n)"
@@ -64,7 +64,7 @@ function Invoke-Uninstallation {
         Remove-Item $stagedPostHook -Force # Cleanup temp script
     }
 
-    $meta = Join-Path $global:METADATA_DIR "$($packageConfig.name).json"
+    $meta = Join-Path $global:ROMs_METADATA "$($packageConfig.name).json"
     if (Test-Path $meta) { 
         Write-Log "Raw Metadata before purge: $(Get-Content $meta -Raw)" "RAW"
         Write-Log "Tracing metadata purge: $meta" "TRACE"

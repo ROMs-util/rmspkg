@@ -6,7 +6,7 @@ function Invoke-Installation {
     $commandName = $packageConfig.commandName
     
     # Robustness: Force absolute, name-based installation paths (Enforce Standard)
-    $appDir = [System.IO.Path]::GetFullPath((Join-Path $global:ROMS_ROOT $packageConfig.name))
+    $appDir = [System.IO.Path]::GetFullPath((Join-Path $global:ROMs_ROOT $packageConfig.name))
 
     try {
         Check-RomsDependencies $packageConfig.dependencies
@@ -128,7 +128,7 @@ function Invoke-Installation {
             $final.artifacts = $global:globalArtifacts
         }
 
-        $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $global:METADATA_DIR "$($packageConfig.name).json") -Encoding utf8
+        $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $global:ROMs_METADATA "$($packageConfig.name).json") -Encoding utf8
         if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." "DEBUG" }
 
         # 2. Post-Install Hook
@@ -149,7 +149,7 @@ function Invoke-Installation {
                 Write-Log "Rolling back: Deleting $appDir" "WARN"
                 Remove-Item $appDir -Recurse -Force 
             }
-            $m = Join-Path $global:METADATA_DIR "$($packageConfig.name).json"
+            $m = Join-Path $global:ROMs_METADATA "$($packageConfig.name).json"
             if (Test-Path $m) { 
                 Write-Log "Rolling back: Deleting metadata $m" "WARN"
                 Remove-Item $m -Force 

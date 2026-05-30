@@ -2,7 +2,7 @@
 
 function Create-Shim {
     param([string]$name, [string]$execPath)
-    $shimPath = Join-Path $global:BIN_DIR "$name.bat"
+    $shimPath = Join-Path $global:ROMs_BIN "$name.bat"
     $content = if ($execPath.EndsWith(".ps1")) { "@echo off`npowershell -ExecutionPolicy Bypass -File `"$execPath`" %*" }
                else { "@echo off`ncall `"$execPath`" %*" }
     $content | Out-File -FilePath $shimPath -Encoding ascii
@@ -12,9 +12,9 @@ function Create-Shim {
 
 function Update-EnvironmentPath {
     $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    if (-not (($currentPath -split ";") -contains $global:BIN_DIR)) {
-        Write-Log "Adding $global:BIN_DIR to User PATH..." "INFO"
-        [Environment]::SetEnvironmentVariable("PATH", $currentPath + ";" + $global:BIN_DIR, "User")
-        Write-Host "[PATH] Added $global:BIN_DIR to User PATH. Restart terminal to apply." -ForegroundColor Yellow
+    if (-not (($currentPath -split ";") -contains $global:ROMs_BIN)) {
+        Write-Log "Adding $global:ROMs_BIN to User PATH..." "INFO"
+        [Environment]::SetEnvironmentVariable("PATH", $currentPath + ";" + $global:ROMs_BIN, "User")
+        Write-Host "[PATH] Added $global:ROMs_BIN to User PATH. Restart terminal to apply." -ForegroundColor Yellow
     }
 }

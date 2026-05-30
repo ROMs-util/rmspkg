@@ -31,10 +31,10 @@ function Show-Help {
     # 5. Infrastructure Paths
     Write-Host "SYSTEM PATHS:" -ForegroundColor Yellow
     $p = "  {0,-12} {1}"
-    Write-Host ($p -f "Root:",     $global:ROMS_ROOT)
-    Write-Host ($p -f "Metadata:", $global:METADATA_DIR)
-    Write-Host ($p -f "Binaries:", $global:BIN_DIR)
-    Write-Host ($p -f "Logs:",     $global:LOG_DIR)
+    Write-Host ($p -f "Root:",     $global:ROMs_ROOT)
+    Write-Host ($p -f "Metadata:", $global:ROMs_METADATA)
+    Write-Host ($p -f "Binaries:", $global:ROMs_BIN)
+    Write-Host ($p -f "Logs:",     $global:ROMs_LOGS)
     
 
     Write-Host "EXAMPLES:" -ForegroundColor Yellow

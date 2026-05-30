@@ -107,7 +107,7 @@ else {
         }
         # 3. Assume it's an App Name (Registry Lookup)
         else {
-            $metaJson = Join-Path $global:METADATA_DIR "$inputPath.json"
+            $metaJson = Join-Path $global:ROMs_METADATA "$inputPath.json"
             if (Test-Path $metaJson) {
                 $packageConfig = Get-Content $metaJson -Raw | ConvertFrom-Json
             }
@@ -130,9 +130,9 @@ $commandName = $packageConfig.commandName
 # ADVICE (UX)
 # ---------------------------------------------
 $finalInstallEngine = $global:IsBootstrap
-if (-not $global:AutoConfirm -and -not $global:IsQuiet -and -not (Test-Path $global:ENGINE_DIR) -and -not (Test-Path $global:ENGINE_BIN) -and ($PSScriptRoot -ne $global:ENGINE_DIR)) {
+if (-not $global:AutoConfirm -and -not $global:IsQuiet -and -not (Test-Path $global:ROMs_ENGINE_DIR) -and -not (Test-Path $global:ROMs_ENGINE_BIN) -and ($PSScriptRoot -ne $global:ROMs_ENGINE_DIR)) {
     Write-Host "`nADVICE: rmspkg is running in portable mode." -ForegroundColor Yellow
-    Write-Host "Would you like to install it permanently to $global:ENGINE_DIR?"
+    Write-Host "Would you like to install it permanently to $global:ROMs_ENGINE_DIR?"
     Write-Host "This will also register 'rmspkg' as a global command."
     $choice = Read-Host "Install rmspkg globally? (y/n)"
     if ($choice.Trim().ToLower() -eq "y") { $finalInstallEngine = $true }
@@ -143,7 +143,7 @@ if (-not $global:AutoConfirm -and -not $global:IsQuiet -and -not (Test-Path $glo
 # EXECUTION
 # ---------------------------------------------
 # Initialize System Folders
-@($global:ROMS_ROOT, $global:METADATA_DIR, $global:LOG_DIR, $global:BIN_DIR) | ForEach-Object { if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ | Out-Null; if ($_ -eq $global:METADATA_DIR) { (Get-Item $_).Attributes = "Hidden" } } }
+@($global:ROMs_ROOT, $global:ROMs_METADATA, $global:ROMs_LOGS, $global:ROMs_BIN) | ForEach-Object { if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ | Out-Null; if ($_ -eq $global:ROMs_METADATA) { (Get-Item $_).Attributes = "Hidden" } } }
 
 # Environment Setup
 Update-EnvironmentPath
@@ -152,7 +152,7 @@ Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScri
 # Action Routing
 switch ($command) {
     "uninstall" {
-        $script:logFile = Join-Path $global:LOG_DIR "$($packageConfig.name).log"
+        $script:logFile = Join-Path $global:ROMs_LOGS "$($packageConfig.name).log"
         Write-Log "Starting uninstallation for $commandName"
         Invoke-Uninstallation -packageConfig $packageConfig
         Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
@@ -165,7 +165,7 @@ switch ($command) {
         exit 0
     }
     "install" {
-        $script:logFile = Join-Path $global:LOG_DIR "$($packageConfig.name).log"
+        $script:logFile = Join-Path $global:ROMs_LOGS "$($packageConfig.name).log"
         Write-Log "Starting installation for $commandName"
         try {
             $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$global:NoShim
@@ -187,7 +187,11 @@ switch ($command) {
             }
             $reportJson = $installationReport | ConvertTo-Json -Depth 10 -Compress
             Write-Log "Raw Installation Report: $reportJson" "RAW"
-            $reportJson # Still output for Manager parsing
+            $reportJson # Still output for pipeline compatibility
+            
+            # File Handshake (Industrial Strength)
+            $handshakeFile = Join-Path $global:ROMs_TEMP "handshake.json"
+            $reportJson | Out-File -FilePath $handshakeFile -Encoding utf8 -Force
 
             Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
             Write-Host "[SUCCESS] $commandName installed." -ForegroundColor Green
