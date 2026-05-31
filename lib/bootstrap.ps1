@@ -3,6 +3,16 @@
 # ---------------------------------------------
 # SELF-HEALING BOOTSTRAP (Handshake Logic)
 # ---------------------------------------------
+# ---------------------------------------------
+# SELF-INSTALLATION AND REGISTRATION
+# Copies the standalone engine to the system root and creates global shims.
+# HOW IT WORKS:
+# 1. If finalInstallEngine or running from non-system root, install to $global:ROMs_ENGINE_DIR.
+# 2. Copy main script (rmspkg.ps1), entire lib/ folder, and roms_package.json.
+# 3. Create shim script (rmspkg.bat) in $global:ROMs_BIN.
+# 4. Register engine metadata in $global:ROMs_METADATA/rmspkg.json.
+# Called during bootstrap command and on first install.
+# ---------------------------------------------
 function Invoke-SelfBootstrap {
     param([bool]$finalInstallEngine, [string]$scriptRoot)
     

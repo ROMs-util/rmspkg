@@ -1,3 +1,17 @@
+# ---------------------------------------------
+# PACKAGE INSTALLATION (Atomic)
+# Extracts and registers an .rms package or project folder.
+# HOW IT WORKS:
+# 1. Check dependencies via Check-RomsDependencies.
+# 2. Create app directory under $global:ROMs_ROOT.
+# 3. Extract files from ZIP (if .rms) or copy from source directory.
+# 4. Run preInstall hook before any file writes.
+# 5. Extract/copy package files.
+# 6. Create shims for each command in package config.
+# 7. Apply environment variables if defined.
+# 8. Run postInstall hook after all files in place.
+# 9. Create metadata JSON in $global:ROMs_METADATA.
+# ---------------------------------------------
 function Invoke-Installation {
     param($packageConfig, $isRmsPackage, $packagePath, $sourceDir, [switch]$noShim)
 
@@ -53,7 +67,7 @@ function Invoke-Installation {
             Add-Type -AssemblyName System.IO.Compression.FileSystem
             $zip = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
             try {
-                # [FEATURE]: Industrial Strength Extraction (Auto-include hooks)
+                # Auto-include hooks from package
                 $pack = @($packageConfig.files) + @("roms_package.json")
                 $allHookTypes = @("preInstall", "postInstall", "preUninstall", "postUninstall")
                 foreach ($ht in $allHookTypes) {
@@ -107,7 +121,7 @@ function Invoke-Installation {
         # Ensure absolute path is persisted
         $final.executable = $exec
         
-        # Industrial Strength: Audit Trail (Persist hash if provided by manager)
+        # Audit Trail (Persist hash if provided by manager)
         if ($global:ROMs_STAGED_HASH) {
             $final | Add-Member -MemberType NoteProperty -Name "sha256" -Value $global:ROMs_STAGED_HASH -Force
         }
@@ -116,7 +130,7 @@ function Invoke-Installation {
             $final | Add-Member -MemberType NoteProperty -Name "artifacts" -Value $global:globalArtifacts -Force 
         }
 
-        # Apply Environment Variables (Industrial Strength)
+        # Apply Environment Variables
         if ($packageConfig.environment_variables) {
             Invoke-RomsEnvironmentSet -Variables $packageConfig.environment_variables
         }
@@ -159,6 +173,16 @@ function Invoke-Installation {
     }
 }
 
+# ---------------------------------------------
+# EXECUTABLE DISCOVERY
+# Scans the extracted package directory for executable files to create shims for.
+# HOW IT WORKS:
+# 1. Define recognized executable extensions (.exe, .bat, .cmd, .ps1).
+# 2. Recursively scan appDir for files with these extensions.
+# 3. Exclude files in "hooks" and "tools" subdirectories.
+# 4. Return array of executable paths, or null if none found.
+# This auto-discovers executables if not explicitly defined in package config.
+# ---------------------------------------------
 function Find-PackageExecutables {
     param(
         [string]$AppDirectory

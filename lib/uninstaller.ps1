@@ -1,3 +1,14 @@
+# ---------------------------------------------
+# PACKAGE UNINSTALLATION
+# Safely removes an installed package: runs hooks, deletes files, cleans metadata.
+# HOW IT WORKS:
+# 1. Run preUninstall hook (if exists) before any deletion.
+# 2. Stage postUninstall hook to temp (because appDir will be deleted).
+# 3. Delete artifacts listed in package config (shims, files, directories).
+# 4. Delete package directory and metadata.
+# 5. Run staged postUninstall hook from temp location.
+# 6. Clean up empty parent directories.
+# ---------------------------------------------
 function Invoke-Uninstallation {
     param($packageConfig)
 
@@ -20,7 +31,7 @@ function Invoke-Uninstallation {
         Invoke-RomsHook -Path $preAbs -ContextName "preUninstall" | Out-Null
     }
 
-    # 2. Stage Post-Uninstall Hook (Industrial Strength Persistence)
+    # 2. Stage Post-Uninstall Hook (Persistence)
     # We must copy the postUninstall script to a temp location because $appDir will be deleted.
     $postRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "postUninstall"
     $postAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $postRel))

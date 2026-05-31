@@ -1,5 +1,13 @@
 # hooks.ps1 - Lifecycle Hook Management
 
+# ---------------------------------------------
+# HOOK PATH RESOLUTION
+# Resolves the relative path to a lifecycle hook script.
+# HOW IT WORKS:
+# 1. Check manifest ($PackageConfig.hooks.$HookType) for explicit path.
+# 2. Fall back to standard kebab-case naming: pre-install.ps1, post-install.ps1, etc.
+# Returns: Relative path string to the hook script.
+# ---------------------------------------------
 function Get-RomsHookPath {
     param(
         [Parameter(Mandatory=$true)]$PackageConfig,
@@ -15,7 +23,7 @@ function Get-RomsHookPath {
         }
     }
 
-    # 2. Check Fallback (Industrial Strength Kebab-Case)
+    # 2. Check Fallback (Kebab-Case Standard)
     $standardName = ""
     switch ($HookType) {
         "preInstall"    { $standardName = "pre-install.ps1" }
@@ -27,6 +35,15 @@ function Get-RomsHookPath {
     return $standardName
 }
 
+# ---------------------------------------------
+# HOOK SCRIPT EXECUTION
+# Runs a lifecycle hook script with proper environment isolation.
+# HOW IT WORKS:
+# 1. Check if hook file exists at given path.
+# 2. Execute via pwsh (PowerShell Core) with -NoProfile for clean environment.
+# 3. Capture stdout/stderr and log each line.
+# 4. Return exit code (0 = success, non-zero = failure), or $null if no hook.
+# ---------------------------------------------
 function Invoke-RomsHook {
     param(
         [Parameter(Mandatory=$true)][string]$Path,

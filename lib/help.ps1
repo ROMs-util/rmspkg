@@ -1,3 +1,9 @@
+# ---------------------------------------------
+# HELP DISPLAY
+# Shows technical documentation for the standalone engine commands.
+# Displays: Usage, Commands (install/uninstall/bootstrap/help), Global Options,
+# System Paths, and Examples. Output via Write-Host for formatting preservation.
+# ---------------------------------------------
 function Show-Help {
     param([string]$invokedAs)
 

@@ -2,9 +2,11 @@
 # Usage: rmspkg <command> [inputPath] [flags]
 
 # ---------------------------------------------
-# ARGUMENT PARSING (Industrial Strength)
+# ARGUMENT PARSING
 # ---------------------------------------------
-# Separate Global Flags (Options) from Positional Data (Command/Path)
+# Separates global flags (options) from positional data (command/path).
+# Uses StartsWith("-") to identify flags, rest is command/input.
+#
 $flags = @($args | Where-Object { $_ -is [string] -and $_.StartsWith("-") })
 [array]$data = @($args | Where-Object { -not ($_ -is [string] -and $_.StartsWith("-")) })
 
@@ -29,7 +31,7 @@ $global:Verbose = ($global:VerboseLevel -gt 0)
 $global:IsBootstrap = ($command -eq "bootstrap")
 
 # ---------------------------------------------
-# LOAD MODULES (Industrial Strength Loading Sequence)
+# LOAD MODULES (Loading Sequence)
 # ---------------------------------------------
 $libPath = Join-Path $PSScriptRoot "lib"
 if (-not (Test-Path $libPath)) {
@@ -80,7 +82,7 @@ else {
             
             if ($resolvedPath.EndsWith(".rms", [System.StringComparison]::OrdinalIgnoreCase)) {
                 $isRmsPackage = $true
-                # Industrial Strength: Peek inside ZIP for manifest using native .NET
+                # Peek inside ZIP for manifest using native .NET
                 Add-Type -AssemblyName System.IO.Compression.FileSystem
                 try {
                     $zip = [System.IO.Compression.ZipFile]::OpenRead($resolvedPath)
@@ -189,7 +191,7 @@ switch ($command) {
             Write-Log "Raw Installation Report: $reportJson" "RAW"
             $reportJson # Still output for pipeline compatibility
             
-            # File Handshake (Industrial Strength)
+            # File Handshake
             $handshakeFile = Join-Path $global:ROMs_TEMP "handshake.json"
             $reportJson | Out-File -FilePath $handshakeFile -Encoding utf8 -Force
 

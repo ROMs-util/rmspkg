@@ -18,6 +18,13 @@ $global:globalArtifacts = @()
 
 # ---------------------------------------------
 # LOGGING SYSTEM
+# Writes timestamped log entries to console (colored by level) and master log file.
+# HOW IT WORKS:
+# 1. Detect JSON in message and pretty-print for readability.
+# 2. Format output with timestamp, source, and level badge.
+# 3. Write to $global:ROMs_MASTER_LOG with retry logic for locked files.
+# 4. Output to console with color coding (INFO=White, WARN=Yellow, ERROR=Red, etc.).
+# Uses global $VerboseLevel: 0=INFO/WARN/ERROR/SUCCESS, 1=+DEBUG, 2=+TRACE, 3=+RAW
 # ---------------------------------------------
 function Write-Log {
     param(
@@ -35,7 +42,7 @@ function Write-Log {
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     
-    # 1. INDUSTRIAL DATA PREPARATION (Extract JSON once)
+    # 1. DATA PREPARATION (Extract JSON once)
     $isJson = ($Message -match "^\s*\{" -or $Message -match "^\s*\[" -or $Message -match ":\s*\{" -or $Message -match ":\s*\[")
     $prefix = ""
     $jsonObj = $null
@@ -114,6 +121,16 @@ function Write-Log {
 # ---------------------------------------------
 # DEPENDENCY VALIDATION
 # ---------------------------------------------
+# ---------------------------------------------
+# DEPENDENCY VERIFICATION
+# Checks if package runtime dependencies are installed in the system.
+# HOW IT WORKS:
+# 1. Load all metadata files from $global:ROMs_METADATA.
+# 2. For each dependency, check if its metadata file exists.
+# 3. Show ERROR and return $false if any dependency is missing.
+# 4. Return $true if all dependencies satisfied.
+# Used before package installation to prevent partial installs.
+# ---------------------------------------------
 function Check-RomsDependencies {
     param($dependencies)
     if ($null -eq $dependencies) { return }
@@ -137,6 +154,14 @@ function Check-RomsDependencies {
 
 # ---------------------------------------------
 # ELEVATION UTILITY
+# ---------------------------------------------
+# ---------------------------------------------
+# ADMINISTRATOR ELEVATION CHECK
+# Verifies the current process is running with Administrator privileges.
+# HOW IT WORKS:
+# 1. Create WindowsPrincipal from current identity.
+# 2. Check if identity is in Administrators role.
+# 3. Return $true if elevated, $false otherwise.
 # ---------------------------------------------
 function Confirm-Elevation {
     param([string]$cmdPath, [hashtable]$params)
