@@ -114,7 +114,27 @@ function Write-Log {
             "RAW"     { "Magenta" }
             Default   { "Gray" }
         }
-        Write-Host $consoleLine -ForegroundColor $color
+
+        # MIRROR PIPE: If redirection is active, standard Write-Host is hidden in the trash file.
+        # We mirror to Console.Error with ANSI colors to force visibility in the current terminal.
+        if ($global:Roms_MirrorLogs) {
+            # ANSI Escape Codes for high-fidelity terminal coloring
+            $ansiColor = switch ($Level) {
+                "ERROR"   { "$([char]27)[31m" } # Red
+                "WARN"    { "$([char]27)[33m" } # Yellow
+                "SUCCESS" { "$([char]27)[32m" } # Green
+                "DEBUG"   { "$([char]27)[90m" } # Gray
+                "TRACE"   { "$([char]27)[36m" } # Cyan
+                "RAW"     { "$([char]27)[35m" } # Magenta
+                Default   { "$([char]27)[0m"  } # Reset
+            }
+            $reset = "$([char]27)[0m"
+            
+            # Bypasses redirection handle with full color support
+            [Console]::Error.WriteLine("${ansiColor}${consoleLine}${reset}")
+        } else {
+            Write-Host $consoleLine -ForegroundColor $color
+        }
     }
 }
 

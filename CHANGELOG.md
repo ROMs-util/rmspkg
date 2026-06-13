@@ -5,6 +5,15 @@ All notable changes to the `rmspkg` standalone engine will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-06-14
+### Added
+- **Mirror Pipe Standard (Standalone Fidelity)**:
+  - Ported the Mirror Pipe architecture to the standalone engine, enabling logs to bypass stdout redirection via ANSI-colored Stderr.
+  - Implemented hardcoded ANSI escape sequences in `Write-Log` to maintain UI colors even when `Write-Host` is suppressed by the shell.
+- **Log Handshake Protocol**:
+  - Added support for the `--mirror` flag to allow the high-level manager to synchronize redirection states.
+  - Standardized the global redirection state variable to `$global:Roms_MirrorLogs`.
+
 ---
 
 ## [v0.1.0-alpha] - 2026-05-31

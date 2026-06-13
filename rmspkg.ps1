@@ -17,6 +17,7 @@ $inputPath = $data[1]
 # Global Flag Pattern (Design Standard: $args -contains)
 $global:AutoConfirm = ($flags -contains "-y") -or ($flags -contains "--yes")
 $global:NoShim      = ($flags -contains "--no-shim")
+$global:Roms_MirrorLogs = ($flags -contains "--mirror")
 
 # Multi-Level Verbosity Parsing
 $global:VerboseLevel = 0
