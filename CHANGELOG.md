@@ -5,6 +5,12 @@ All notable changes to the `rmspkg` standalone engine will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Fixed
+- **Mirror Pipe Banner Visibility**:
+  - Fixed a bug where the engine's success/uninstall banners (`[SUCCESS] ... installed/uninstalled.`) and the raw JSON handshake output were invisible when `roms install pkg:>constraint` triggered Mirror Pipe mode. CMD redirected stdout to a trash file, and the engine's `Write-Host` calls were being swallowed along with it.
+  - Applied the Mirror Pipe Standard (established in `fix#58`) to `rmspkg.ps1`: all three `Write-Host` banner blocks (install, uninstall, raw JSON) now check `$global:Roms_MirrorLogs` and route through `[Console]::Error.WriteLine()` with ANSI escape sequences when mirroring is active, falling back to `Write-Host` in normal mode.
+
 ## [Unreleased] - 2026-06-14
 ### Added
 - **Mirror Pipe Standard (Standalone Fidelity)**:
@@ -13,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Log Handshake Protocol**:
   - Added support for the `--mirror` flag to allow the high-level manager to synchronize redirection states.
   - Standardized the global redirection state variable to `$global:Roms_MirrorLogs`.
+
 
 ---
 

@@ -158,9 +158,17 @@ switch ($command) {
         $script:logFile = Join-Path $global:ROMs_LOGS "$($packageConfig.name).log"
         Write-Log "Starting uninstallation for $commandName"
         Invoke-Uninstallation -packageConfig $packageConfig
-        Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
-        Write-Host "[SUCCESS] $commandName uninstalled." -ForegroundColor Green
-        Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
+        # MIRROR PIPE: When stdout is redirected, route banner through Console.Error
+        # so it remains visible in the current terminal (same standard as core.ps1).
+        if ($global:Roms_MirrorLogs) {
+            [Console]::Error.WriteLine("$([char]27)[90m`n-----------------------------------------------------$([char]27)[0m")
+            [Console]::Error.WriteLine("$([char]27)[32m[SUCCESS] $commandName uninstalled.$([char]27)[0m")
+            [Console]::Error.WriteLine("$([char]27)[90m-----------------------------------------------------`n$([char]27)[0m")
+        } else {
+            Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
+            Write-Host "[SUCCESS] $commandName uninstalled." -ForegroundColor Green
+            Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
+        }
         exit 0
     }
     "bootstrap" {
@@ -190,16 +198,30 @@ switch ($command) {
             }
             $reportJson = $installationReport | ConvertTo-Json -Depth 10 -Compress
             Write-Log "Raw Installation Report: $reportJson" "RAW"
-            $reportJson # Still output for pipeline compatibility
+            # MIRROR PIPE: Raw JSON is also stdout; mirror it so handshake is visible in terminal.
+            if ($global:Roms_MirrorLogs) {
+                [Console]::Error.WriteLine($reportJson)
+            } else {
+                $reportJson # Still output for pipeline compatibility
+            }
             
             # File Handshake
             $handshakeFile = Join-Path $global:ROMs_TEMP "handshake.json"
             $reportJson | Out-File -FilePath $handshakeFile -Encoding utf8 -Force
 
-            Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
-            Write-Host "[SUCCESS] $commandName installed." -ForegroundColor Green
-            Write-Host "          Log: $script:logFile"
-            Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
+            # MIRROR PIPE: When stdout is redirected, route banner through Console.Error
+            # so it remains visible in the current terminal (same standard as core.ps1).
+            if ($global:Roms_MirrorLogs) {
+                [Console]::Error.WriteLine("$([char]27)[90m`n-----------------------------------------------------$([char]27)[0m")
+                [Console]::Error.WriteLine("$([char]27)[32m[SUCCESS] $commandName installed.$([char]27)[0m")
+                [Console]::Error.WriteLine("$([char]27)[37m          Log: $script:logFile$([char]27)[0m")
+                [Console]::Error.WriteLine("$([char]27)[90m-----------------------------------------------------`n$([char]27)[0m")
+            } else {
+                Write-Host "`n-----------------------------------------------------" -ForegroundColor Gray
+                Write-Host "[SUCCESS] $commandName installed." -ForegroundColor Green
+                Write-Host "          Log: $script:logFile"
+                Write-Host "-----------------------------------------------------`n" -ForegroundColor Gray
+            }
             exit 0
         } catch {
             Write-Error "[FATAL] Installation failed. See log: $script:logFile"
