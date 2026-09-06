@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Fixed
+- **Package Dependency Parsing**: `lib/core.ps1` — Fixed missing handling for the `dependencies.packages` property in `Check-RomsDependencies`, ensuring dependencies declared under the Trinity v1.1 schema are properly validated before installation.
+
+## [v0.1.0-beta.1] - 2026-09-06
+### Fixed
 - **Mirror Pipe Banner Visibility**:
   - Fixed a bug where the engine's success/uninstall banners (`[SUCCESS] ... installed/uninstalled.`) and the raw JSON handshake output were invisible when `roms install pkg:>constraint` triggered Mirror Pipe mode. CMD redirected stdout to a trash file, and the engine's `Write-Host` calls were being swallowed along with it.
   - Applied the Mirror Pipe Standard (established in `fix#58`) to `rmspkg.ps1`: all three `Write-Host` banner blocks (install, uninstall, raw JSON) now check `$global:Roms_MirrorLogs` and route through `[Console]::Error.WriteLine()` with ANSI escape sequences when mirroring is active, falling back to `Write-Host` in normal mode.
 
-## [Unreleased] - 2026-06-14
+## [d8b157c] - 2026-06-14
 ### Added
 - **Mirror Pipe Standard (Standalone Fidelity)**:
   - Ported the Mirror Pipe architecture to the standalone engine, enabling logs to bypass stdout redirection via ANSI-colored Stderr.

@@ -158,6 +158,8 @@ function Check-RomsDependencies {
     $depNames = @()
     if ($dependencies -is [System.Array]) {
         $depNames = $dependencies
+    } elseif ($dependencies.packages -is [System.Array]) {
+        $depNames = $dependencies.packages
     } elseif ($dependencies.roms -is [System.Array]) {
         $depNames = $dependencies.roms
     }
