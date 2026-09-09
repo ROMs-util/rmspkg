@@ -20,7 +20,9 @@ function Invoke-Installation {
     $commandName = $packageConfig.commandName
     
     # Robustness: Force absolute, name-based installation paths (Enforce Standard)
-    $appDir = [System.IO.Path]::GetFullPath((Join-Path $global:ROMs_ROOT $packageConfig.name))
+    # Containment: validate the name is a plain token, then join to the root and
+    # verify the resolved directory stays inside $global:ROMs_ROOT (no ".." escape).
+    $appDir = Assert-PathWithinRoot -Path (Join-Path $global:ROMs_ROOT (Get-SafeName $packageConfig.name)) -Root $global:ROMs_ROOT
 
     try {
         Check-RomsDependencies $packageConfig.dependencies

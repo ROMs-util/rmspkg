@@ -41,6 +41,7 @@ if (-not (Test-Path $libPath)) {
 }
 
 # 1. Foundations
+. (Join-Path $libPath "safety.ps1")
 . (Join-Path $libPath "core.ps1")
 . (Join-Path $libPath "help.ps1")
 . (Join-Path $libPath "environment.ps1")
