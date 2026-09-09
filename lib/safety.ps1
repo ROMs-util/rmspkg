@@ -9,7 +9,13 @@
 # 1. Get-SafeName rejects anything that is not a plain identifier token.
 # 2. Assert-PathWithinRoot canonicalizes a candidate path under a root and
 #    guarantees the result is still inside that root.
-# Both use native .NET ([System.IO.Path]) directly for version-proof behavior.
+# 3. Get-SafeRelativePath validates a manifest-relative file/hook path and
+#    resolves it under a trusted root, rejecting traversal/absolute escapes.
+# All use native .NET ([System.IO.Path]) directly for version-proof behavior
+# (the .NET Rule). Per DESIGN_STANDARDS.md §10 "Log-Only Error Abort", every
+# rejection emits a tagged [ERROR] entry via Write-Log (the single log
+# pipeline) and then throws a message-less sentinel to abort without a
+# duplicate message.
 # ---------------------------------------------
 
 function Get-SafeName {
@@ -23,7 +29,8 @@ function Get-SafeName {
 
     $allowlist = '^[A-Za-z0-9][A-Za-z0-9._-]*$'
     if ($Name -notmatch $allowlist) {
-        throw "Invalid name '$Name': must match $allowlist (no path separators or '..')"
+        Write-Log "Invalid name '$Name': must match $allowlist (no path separators or '..')" "ERROR"
+        throw [System.Security.SecurityException]::new("containment")
     }
     return $Name
 }
@@ -49,7 +56,8 @@ function Assert-PathWithinRoot {
         return $resolvedPath
     }
 
-    throw "Path '$resolvedPath' escapes root '$resolvedRoot'"
+    Write-Log "Path '$resolvedPath' escapes root '$resolvedRoot'" "ERROR"
+    throw [System.Security.SecurityException]::new("containment")
 }
 
 function Get-SafeRelativePath {
@@ -65,18 +73,22 @@ function Get-SafeRelativePath {
     )
 
     if ($Relative.StartsWith('\\') -or $Relative.StartsWith('//')) {
-        throw "Relative path '$Relative' contains a UNC prefix"
+        Write-Log "Relative path '$Relative' contains a UNC prefix" "ERROR"
+        throw [System.Security.SecurityException]::new("containment")
     }
     if ($Relative -match '^[A-Za-z]:') {
-        throw "Relative path '$Relative' contains a drive-letter segment"
+        Write-Log "Relative path '$Relative' contains a drive-letter segment" "ERROR"
+        throw [System.Security.SecurityException]::new("containment")
     }
 
     foreach ($seg in ($Relative -split '[\\/]')) {
         if ($seg -eq '..') {
-            throw "Relative path '$Relative' contains a '..' traversal segment"
+            Write-Log "Relative path '$Relative' contains a '..' traversal segment" "ERROR"
+            throw [System.Security.SecurityException]::new("containment")
         }
         if ($seg -match ':') {
-            throw "Relative path '$Relative' contains an Alternate Data Stream separator"
+            Write-Log "Relative path '$Relative' contains an Alternate Data Stream separator" "ERROR"
+            throw [System.Security.SecurityException]::new("containment")
         }
     }
 
