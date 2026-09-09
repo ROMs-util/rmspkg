@@ -82,7 +82,9 @@ function Invoke-Installation {
                     $e = $zip.Entries | Where-Object { $_.FullName -eq $fNormalized }
                     if ($e) {
                         Write-Log "Tracing extraction: $($fNormalized)" "TRACE"
-                        $d = [System.IO.Path]::GetFullPath((Join-Path $appDir $f))
+                        # Containment: resolve the manifest-relative file path under
+                        # $appDir and reject any that escape it (.., drive, UNC, ADS).
+                        $d = Get-SafeRelativePath -Relative $f -Root $appDir
                         $p = Split-Path $d
                         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
                         [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
@@ -92,11 +94,13 @@ function Invoke-Installation {
             } finally { $zip.Dispose() }
         } else {
             foreach ($f in (@($packageConfig.files) + @("roms_package.json"))) {
-                $s = Join-Path $sourceDir $f; $d = Join-Path $appDir $f
-                if ($s -ne $d) { 
+                # Containment: resolve both source and destination under their
+                # respective roots, rejecting traversal/absolute escapes.
+                $s = Get-SafeRelativePath -Relative $f -Root $sourceDir; $d = Get-SafeRelativePath -Relative $f -Root $appDir
+                if ($s -ne $d) {
                     $destParent = Split-Path $d
                     if (-not (Test-Path $destParent)) { New-Item -ItemType Directory -Path $destParent -Force | Out-Null }
-                    
+
                     Write-Log "Tracing copy: $f" "TRACE"
                     Copy-Item $s $d -Force -ErrorAction Stop
                     Write-Log "Copied: $f" "DEBUG"

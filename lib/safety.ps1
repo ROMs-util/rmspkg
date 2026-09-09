@@ -51,3 +51,34 @@ function Assert-PathWithinRoot {
 
     throw "Path '$resolvedPath' escapes root '$resolvedRoot'"
 }
+
+function Get-SafeRelativePath {
+    # Validates a relative path taken from a package manifest (files[] entry or
+    # hook path) and resolves it under Root, guaranteeing the result stays inside
+    # Root. A valid relative path must not traverse upward (".."), must not be a
+    # rooted/drive-qualified path (":"), and must not carry an NTFS Alternate
+    # Data Stream ("file:stream"). On violation it throws before any join/write.
+    # Returns the full resolved path inside Root.
+    param(
+        [Parameter(Mandatory = $true)][string]$Relative,
+        [Parameter(Mandatory = $true)][string]$Root
+    )
+
+    if ($Relative.StartsWith('\\') -or $Relative.StartsWith('//')) {
+        throw "Relative path '$Relative' contains a UNC prefix"
+    }
+    if ($Relative -match '^[A-Za-z]:') {
+        throw "Relative path '$Relative' contains a drive-letter segment"
+    }
+
+    foreach ($seg in ($Relative -split '[\\/]')) {
+        if ($seg -eq '..') {
+            throw "Relative path '$Relative' contains a '..' traversal segment"
+        }
+        if ($seg -match ':') {
+            throw "Relative path '$Relative' contains an Alternate Data Stream separator"
+        }
+    }
+
+    return Assert-PathWithinRoot -Path (Join-Path $Root $Relative) -Root $Root
+}
