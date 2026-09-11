@@ -71,7 +71,7 @@ function Invoke-Uninstallation {
     # 3. Post-Uninstall Hook (Execution)
     if ($stagedPostHook) {
         Write-Log "Tracing post-uninstall execution: $stagedPostHook" "TRACE"
-        Invoke-RomsHook -Path $stagedPostHook -ContextName "postUninstall" | Out-Null
+        Invoke-RomsHook -Path $stagedPostHook -ContextName "postUninstall" -AllowStaged | Out-Null
         Remove-Item $stagedPostHook -Force # Cleanup temp script
     }
 

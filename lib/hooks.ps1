@@ -47,8 +47,21 @@ function Get-RomsHookPath {
 function Invoke-RomsHook {
     param(
         [Parameter(Mandatory=$true)][string]$Path,
-        [Parameter(Mandatory=$true)][string]$ContextName # e.g. "postInstall"
+        [Parameter(Mandatory=$true)][string]$ContextName, # e.g. "postInstall"
+        [switch]$AllowStaged
     )
+
+    # Containment (Log-Only Error Abort): the hook
+    # script must live strictly inside $global:ROMs_ROOT before we hand it to
+    # pwsh, so a malicious manifest can never run an arbitrary script elsewhere
+    # on disk. Assert-PathWithinRoot canonicalizes the path and throws a
+    # message-less sentinel (after Write-Log'ing the reason) on any escape.
+    # The staged post-uninstall hook is the one legitimate exception: it is
+    # copied to $env:TEMP to survive the app dir's deletion, so that caller
+    # opts in via -AllowStaged with an already-known-safe absolute path.
+    if (-not $AllowStaged) {
+        $Path = Assert-PathWithinRoot -Path $Path -Root $global:ROMs_ROOT
+    }
 
     if (Test-Path $Path) {
         Write-Log "Running hook: $ContextName ($($Path | Split-Path -Leaf))" "INFO"
