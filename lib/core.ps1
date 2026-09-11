@@ -168,7 +168,8 @@ function Check-RomsDependencies {
         # Strip version constraint for registry check (Manager handles resolution)
         $cleanName = $depName.Split(':')[0]
         if (-not (Test-Path (Join-Path $global:ROMs_METADATA "$cleanName.json"))) {
-            throw "Missing required package dependency: '$depName'. Please install it first."
+            Write-Log "Missing required package dependency: '$depName'. Please install it first." "ERROR"
+            throw [System.Security.SecurityException]::new("containment")
         }
         Write-Log "Verified dependency: $depName" "DEBUG"
     }

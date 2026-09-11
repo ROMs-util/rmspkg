@@ -62,7 +62,10 @@ function Invoke-Installation {
         if (Test-Path $preAbs) {
             Write-Log "Tracing hook execution: $preRel" "TRACE"
             $res = Invoke-RomsHook -Path $preAbs -ContextName "preInstall"
-            if ($res -and $res -ne 0) { throw "preInstall hook failed." }
+            if ($res -and $res -ne 0) {
+                Write-Log "Pre-install hook failed with exit code $res." "ERROR"
+                throw [System.Security.SecurityException]::new("containment")
+            }
         }
 
         if ($isRmsPackage) {
@@ -157,13 +160,22 @@ function Invoke-Installation {
         if (Test-Path $postAbs) {
             Write-Log "Tracing hook execution: $postRel" "TRACE"
             $res = Invoke-RomsHook -Path $postAbs -ContextName "postInstall"
-            if ($res -and $res -ne 0) { throw "postInstall hook failed." }
+            if ($res -and $res -ne 0) {
+                Write-Log "Post-install hook failed with exit code $res." "ERROR"
+                throw [System.Security.SecurityException]::new("containment")
+            }
         }
 
         $rollbackNeeded = $false
         return $appDir # Return the installation directory
     } catch {
-        Write-Log "CRITICAL ERROR: $_" "ERROR"
+        # Only re-log errors that were not already logged upstream. Sentinels
+        # thrown by safety.ps1 / hook guards carry the message "containment"
+        # and were already emitted via Write-Log at their source, so we skip
+        # re-logging them here to avoid a duplicate error line.
+        if ($_.Exception.Message -ne "containment") {
+            Write-Log "CRITICAL ERROR: $_" "ERROR"
+        }
         if ($rollbackNeeded) {
             if ($createdDir) { 
                 Write-Log "Rolling back: Deleting $appDir" "WARN"

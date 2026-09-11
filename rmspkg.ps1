@@ -36,6 +36,10 @@ $global:IsBootstrap = ($command -eq "bootstrap")
 # ---------------------------------------------
 $libPath = Join-Path $PSScriptRoot "lib"
 if (-not (Test-Path $libPath)) {
+    # Written as Write-Error, not Write-Log, because Write-Log is defined in
+    # lib/core.ps1 which has not been dot-sourced yet at this point in the load
+    # sequence (see line 45). Write-Log would be undefined here, so the raw
+    # error stream is the only channel available this early in bootstrap.
     Write-Error "[FATAL] Library folder not found at $libPath"
     exit 1
 }
@@ -124,7 +128,7 @@ else {
 }
 
 if (-not $packageConfig) {
-    Write-Error "[FATAL] Could not identify package or application from input: '$inputPath'"
+    Write-Log "Could not identify package or application from input: '$inputPath'" "ERROR"
     exit 1
 }
 
@@ -225,12 +229,12 @@ switch ($command) {
             }
             exit 0
         } catch {
-            Write-Error "[FATAL] Installation failed. See log: $script:logFile"
+            Write-Log "Installation failed. See log: $script:logFile" "ERROR"
             exit 1
         }
     }
     Default {
-        Write-Error "[FATAL] Unknown command: $command"
+        Write-Log "Unknown command: $command" "ERROR"
         exit 1
     }
 }
