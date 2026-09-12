@@ -8,11 +8,24 @@
 # 2. If execPath ends in .ps1, use powershell -File; otherwise use call.
 # 3. Track created shim in $global:globalArtifacts for cleanup.
 # ---------------------------------------------
+function Get-CmdEscapedPath {
+    # Escapes a path so it is safe to embed inside a quoted CMD (batch) command line.
+    # CMD treats & | < > ^ as metacharacters and %N as variables; escaping each with
+    # a caret preserves the literal path when the generated shim is executed.
+    param([string]$Path)
+    $Path = $Path.Replace("^", "^^")
+    foreach ($ch in @("&", "|", "<", ">")) {
+        $Path = $Path.Replace($ch, "^$ch")
+    }
+    return $Path
+}
+
 function Create-Shim {
     param([string]$name, [string]$execPath)
     $shimPath = Join-Path $global:ROMs_BIN "$name.bat"
-    $content = if ($execPath.EndsWith(".ps1")) { "@echo off`npowershell -ExecutionPolicy Bypass -File `"$execPath`" %*" }
-               else { "@echo off`ncall `"$execPath`" %*" }
+    $safePath = Get-CmdEscapedPath $execPath
+    $content = if ($execPath.EndsWith(".ps1")) { "@echo off`npowershell -ExecutionPolicy Bypass -File `"$safePath`" %*" }
+               else { "@echo off`ncall `"$safePath`" %*" }
     $content | Out-File -FilePath $shimPath -Encoding ascii
     Write-Log "Created shim: $name -> $execPath" "INFO"
     if ($global:globalArtifacts -notcontains $shimPath) { $global:globalArtifacts += $shimPath }
