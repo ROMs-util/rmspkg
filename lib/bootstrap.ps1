@@ -30,11 +30,12 @@ function Invoke-SelfBootstrap {
             if (Test-Path $libSrc) {
                 Get-ChildItem -Path $libSrc -File | ForEach-Object {
                     $src = $_.FullName
-                    $dest = Join-Path $global:ROMs_ENGINE_DIR "lib/$($_.Name)"
+                    $safeName = Get-SafeName $_.Name
+                    $dest = Join-Path $global:ROMs_ENGINE_DIR "lib/$safeName"
                     $destParent = Split-Path $dest
                     if (-not (Test-Path $destParent)) { New-Item -ItemType Directory -Path $destParent -Force | Out-Null }
-                    
-                    Write-Log "Tracing bootstrap library copy: lib/$($_.Name)" "TRACE"
+
+                    Write-Log "Tracing bootstrap library copy: lib/$safeName" "TRACE"
                     Copy-Item $src $dest -Force
                 }
             }
