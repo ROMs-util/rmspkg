@@ -47,7 +47,7 @@ function Invoke-Installation {
                 $e = $zip.Entries | Where-Object { $_.FullName -eq $preRelNormalized }
                 if ($e) {
                     Write-Log "Tracing preInstall hook extraction: $preRel" "TRACE"
-                    $d = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
+                    $d = Get-SafeRelativePath -Relative $preRel -Root $appDir
                     $p = Split-Path $d
                     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
                     [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
@@ -58,7 +58,7 @@ function Invoke-Installation {
 
         # 2. Pre-Install Hook
         $preRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "preInstall"
-        $preAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
+        $preAbs = Get-SafeRelativePath -Relative $preRel -Root $appDir
         if (Test-Path $preAbs) {
             Write-Log "Tracing hook execution: $preRel" "TRACE"
             $res = Invoke-RomsHook -Path $preAbs -ContextName "preInstall"
