@@ -56,7 +56,13 @@ function Invoke-Uninstallation {
     if ($packageConfig.artifacts) {
         Write-Log "Raw Artifacts List: $($packageConfig.artifacts | ConvertTo-Json -Compress)" "RAW"
         foreach ($art in $packageConfig.artifacts) {
-            if (Test-Path $art -PathType Leaf) {
+            # Environment artifacts are scope markers ("env:KEY"), not file paths.
+            # They MUST short-circuit before the file containment check: "env:" is a
+            # real PowerShell drive so Test-Path would pass, and the colon then makes
+            # GetFullPath throw. Delegation to the orchestrator handles both scopes.
+            if ($art.StartsWith("env:")) {
+                Invoke-RomsEnvironmentRemove -Key $art.Substring(4)
+            } elseif (Test-Path $art -PathType Leaf) {
                 # Containment: an artifact is attacker-controlled manifest data, so
                 # it must resolve to a descendant of $appDir or $global:ROMs_BIN (the
                 # two places the engine legitimately writes: package files and shared
