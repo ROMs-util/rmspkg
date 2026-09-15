@@ -36,11 +36,16 @@ $global:IsBootstrap = ($command -eq "bootstrap")
 # ---------------------------------------------
 $libPath = Join-Path $PSScriptRoot "lib"
 if (-not (Test-Path $libPath)) {
+    # Written as Write-Error, not Write-Log, because Write-Log is defined in
+    # lib/core.ps1 which has not been dot-sourced yet at this point in the load
+    # sequence (see line 45). Write-Log would be undefined here, so the raw
+    # error stream is the only channel available this early in bootstrap.
     Write-Error "[FATAL] Library folder not found at $libPath"
     exit 1
 }
 
 # 1. Foundations
+. (Join-Path $libPath "safety.ps1")
 . (Join-Path $libPath "core.ps1")
 . (Join-Path $libPath "help.ps1")
 . (Join-Path $libPath "environment.ps1")
@@ -123,7 +128,7 @@ else {
 }
 
 if (-not $packageConfig) {
-    Write-Error "[FATAL] Could not identify package or application from input: '$inputPath'"
+    Write-Log "Could not identify package or application from input: '$inputPath'" "ERROR"
     exit 1
 }
 
@@ -155,7 +160,12 @@ Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScri
 # Action Routing
 switch ($command) {
     "uninstall" {
-        $script:logFile = Join-Path $global:ROMs_LOGS "$($packageConfig.name).log"
+        # B1 guard: the log file name must pass Get-SafeName BEFORE composition.
+        # A manifest name is attacker-controlled text; joining it raw lets a
+        # traversal value ("..\x") plant a log file OUTSIDE C:\roms\logs before
+        # any deeper guard runs. Rejection aborts via the message-less
+        # "containment" sentinel (Log-Only Error Abort).
+        $script:logFile = Join-Path $global:ROMs_LOGS "$(Get-SafeName $packageConfig.name).log"
         Write-Log "Starting uninstallation for $commandName"
         Invoke-Uninstallation -packageConfig $packageConfig
         # MIRROR PIPE: When stdout is redirected, route banner through Console.Error
@@ -176,9 +186,17 @@ switch ($command) {
         exit 0
     }
     "install" {
-        $script:logFile = Join-Path $global:ROMs_LOGS "$($packageConfig.name).log"
         Write-Log "Starting installation for $commandName"
         try {
+            # B1 guard: validate the manifest name via Get-SafeName before the
+            # per-package log file is ever composed. A manifest name is
+            # attacker-controlled text; joining it raw lets a traversal value
+            # ("..\x") plant a log OUTSIDE C:\roms\logs. Inside the try, a
+            # rejection throws the message-less "containment" sentinel, the
+            # catch below logs one failure line, and $script:logFile stays
+            # unset — so no file handle is ever opened under a bad name.
+            $safeName = Get-SafeName $packageConfig.name
+            $script:logFile = Join-Path $global:ROMs_LOGS "$safeName.log"
             $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$global:NoShim
 
             $packageId = if ($packageConfig.version) { "$($packageConfig.name)-$($packageConfig.version)" } else { $packageConfig.name }
@@ -224,12 +242,12 @@ switch ($command) {
             }
             exit 0
         } catch {
-            Write-Error "[FATAL] Installation failed. See log: $script:logFile"
+            Write-Log "Installation failed. See log: $script:logFile" "ERROR"
             exit 1
         }
     }
     Default {
-        Write-Error "[FATAL] Unknown command: $command"
+        Write-Log "Unknown command: $command" "ERROR"
         exit 1
     }
 }

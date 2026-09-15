@@ -20,7 +20,9 @@ function Invoke-Installation {
     $commandName = $packageConfig.commandName
     
     # Robustness: Force absolute, name-based installation paths (Enforce Standard)
-    $appDir = [System.IO.Path]::GetFullPath((Join-Path $global:ROMs_ROOT $packageConfig.name))
+    # Containment: validate the name is a plain token, then join to the root and
+    # verify the resolved directory stays inside $global:ROMs_ROOT (no ".." escape).
+    $appDir = Assert-PathWithinRoot -Path (Join-Path $global:ROMs_ROOT (Get-SafeName $packageConfig.name)) -Root $global:ROMs_ROOT
 
     try {
         Check-RomsDependencies $packageConfig.dependencies
@@ -45,7 +47,7 @@ function Invoke-Installation {
                 $e = $zip.Entries | Where-Object { $_.FullName -eq $preRelNormalized }
                 if ($e) {
                     Write-Log "Tracing preInstall hook extraction: $preRel" "TRACE"
-                    $d = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
+                    $d = Get-SafeRelativePath -Relative $preRel -Root $appDir
                     $p = Split-Path $d
                     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
                     [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
@@ -56,11 +58,14 @@ function Invoke-Installation {
 
         # 2. Pre-Install Hook
         $preRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "preInstall"
-        $preAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
+        $preAbs = Get-SafeRelativePath -Relative $preRel -Root $appDir
         if (Test-Path $preAbs) {
             Write-Log "Tracing hook execution: $preRel" "TRACE"
             $res = Invoke-RomsHook -Path $preAbs -ContextName "preInstall"
-            if ($res -and $res -ne 0) { throw "preInstall hook failed." }
+            if ($res -and $res -ne 0) {
+                Write-Log "Pre-install hook failed with exit code $res." "ERROR"
+                throw [System.Security.SecurityException]::new("containment")
+            }
         }
 
         if ($isRmsPackage) {
@@ -80,7 +85,9 @@ function Invoke-Installation {
                     $e = $zip.Entries | Where-Object { $_.FullName -eq $fNormalized }
                     if ($e) {
                         Write-Log "Tracing extraction: $($fNormalized)" "TRACE"
-                        $d = [System.IO.Path]::GetFullPath((Join-Path $appDir $f))
+                        # Containment: resolve the manifest-relative file path under
+                        # $appDir and reject any that escape it (.., drive, UNC, ADS).
+                        $d = Get-SafeRelativePath -Relative $f -Root $appDir
                         $p = Split-Path $d
                         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
                         [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
@@ -90,11 +97,13 @@ function Invoke-Installation {
             } finally { $zip.Dispose() }
         } else {
             foreach ($f in (@($packageConfig.files) + @("roms_package.json"))) {
-                $s = Join-Path $sourceDir $f; $d = Join-Path $appDir $f
-                if ($s -ne $d) { 
+                # Containment: resolve both source and destination under their
+                # respective roots, rejecting traversal/absolute escapes.
+                $s = Get-SafeRelativePath -Relative $f -Root $sourceDir; $d = Get-SafeRelativePath -Relative $f -Root $appDir
+                if ($s -ne $d) {
                     $destParent = Split-Path $d
                     if (-not (Test-Path $destParent)) { New-Item -ItemType Directory -Path $destParent -Force | Out-Null }
-                    
+
                     Write-Log "Tracing copy: $f" "TRACE"
                     Copy-Item $s $d -Force -ErrorAction Stop
                     Write-Log "Copied: $f" "DEBUG"
@@ -151,22 +160,58 @@ function Invoke-Installation {
         if (Test-Path $postAbs) {
             Write-Log "Tracing hook execution: $postRel" "TRACE"
             $res = Invoke-RomsHook -Path $postAbs -ContextName "postInstall"
-            if ($res -and $res -ne 0) { throw "postInstall hook failed." }
+            if ($res -and $res -ne 0) {
+                Write-Log "Post-install hook failed with exit code $res." "ERROR"
+                throw [System.Security.SecurityException]::new("containment")
+            }
         }
 
         $rollbackNeeded = $false
         return $appDir # Return the installation directory
     } catch {
-        Write-Log "CRITICAL ERROR: $_" "ERROR"
+        # Only re-log errors that were not already logged upstream. Sentinels
+        # thrown by safety.ps1 / hook guards carry the message "containment"
+        # and were already emitted via Write-Log at their source, so we skip
+        # re-logging them here to avoid a duplicate error line.
+        if ($_.Exception.Message -ne "containment") {
+            Write-Log "CRITICAL ERROR: $_" "ERROR"
+        }
         if ($rollbackNeeded) {
             if ($createdDir) { 
                 Write-Log "Rolling back: Deleting $appDir" "WARN"
                 Remove-Item $appDir -Recurse -Force 
             }
             $m = Join-Path $global:ROMs_METADATA "$($packageConfig.name).json"
-            if (Test-Path $m) { 
+            if (Test-Path $m) {
                 Write-Log "Rolling back: Deleting metadata $m" "WARN"
-                Remove-Item $m -Force 
+                Remove-Item $m -Force
+            }
+            # B7+B8: environment variables (step 7) and the command shim
+            # (step 6) are applied BEFORE the post-install hook runs, but
+            # their artifact entries only reach the metadata file on
+            # success. Without this purge, a hook failure rolls back the
+            # app directory and metadata yet leaves the variables orphaned
+            # in the registry and the shim dangling in ROMs_BIN — no later
+            # uninstall can find either, because the artifact record is
+            # gone. Walk the in-memory artifact list: "env:<KEY>" markers
+            # go through scope-neutral removal (Machine then User) exactly
+            # like the uninstall path; raw-path entries (shims) are deleted
+            # if still present. Only the engine itself appends raw paths to
+            # this list (Create-Shim, under ROMs_BIN from a name already
+            # validated by Get-SafeName), so they are trusted values.
+            # Each purge is isolated in its own try/catch so a failed
+            # cleanup can never mask the original install error we re-throw.
+            foreach ($art in @($global:globalArtifacts)) {
+                try {
+                    if ($art.StartsWith("env:")) {
+                        Invoke-RomsEnvironmentRemove -Key $art.Substring(4)
+                    } elseif (Test-Path $art -PathType Leaf) {
+                        Remove-Item $art -Force
+                        Write-Log "Rollback removed artifact: $art" "INFO"
+                    }
+                } catch {
+                    Write-Log "Rollback could not purge artifact: $art" "WARN"
+                }
             }
         }
         throw $_

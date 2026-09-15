@@ -166,9 +166,10 @@ function Check-RomsDependencies {
 
     foreach ($depName in $depNames) {
         # Strip version constraint for registry check (Manager handles resolution)
-        $cleanName = $depName.Split(':')[0]
+        $cleanName = Get-SafeName ($depName.Split(':')[0])
         if (-not (Test-Path (Join-Path $global:ROMs_METADATA "$cleanName.json"))) {
-            throw "Missing required package dependency: '$depName'. Please install it first."
+            Write-Log "Missing required package dependency: '$depName'. Please install it first." "ERROR"
+            throw [System.Security.SecurityException]::new("containment")
         }
         Write-Log "Verified dependency: $depName" "DEBUG"
     }
@@ -192,19 +193,22 @@ function Confirm-Elevation {
     if (-not $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         Write-Log "Elevation required to modify $global:ROMs_ROOT. Requesting Administrator privileges..." "INFO"
         
-        $argString = "-NoExit -ExecutionPolicy Bypass -File `"$cmdPath`""
-        if ($params.command) { $argString += " $($params.command)" }
-        if ($params.inputPath) { $argString += " `"$($params.inputPath)`"" }
-        if ($params.installEngine) { $argString += " -installEngine" }
-        
-        # Explicitly forward verbosity flags to the elevated process
-        if ($global:VerboseLevel -eq 3) { $argString += " -vvv" }
-        elseif ($global:VerboseLevel -eq 2) { $argString += " -vv" }
-        elseif ($global:VerboseLevel -eq 1) { $argString += " -v" }
+        $argv = [System.Collections.Generic.List[string]]::new()
+        $argv.Add("-NoExit")
+        $argv.Add("-ExecutionPolicy"); $argv.Add("Bypass")
+        $argv.Add("-File"); $argv.Add($cmdPath)
+        if ($params.command) { $argv.Add($params.command) }
+        if ($params.inputPath) { $argv.Add($params.inputPath) }
+        if ($params.installEngine) { $argv.Add("-installEngine") }
 
-        $argString += " -skipAdvice" 
-        
-        Start-Process powershell -Verb RunAs -ArgumentList $argString
+        # Explicitly forward verbosity flags to the elevated process
+        if ($global:VerboseLevel -eq 3) { $argv.Add("-vvv") }
+        elseif ($global:VerboseLevel -eq 2) { $argv.Add("-vv") }
+        elseif ($global:VerboseLevel -eq 1) { $argv.Add("-v") }
+
+        $argv.Add("-skipAdvice")
+
+        Start-Process powershell -Verb RunAs -ArgumentList $argv
         return $false
     }
     return $true

@@ -14,7 +14,10 @@ function Invoke-Uninstallation {
 
     $commandName = $packageConfig.commandName
     # Robustness: Force name-based uninstallation path (Enforce Standard)
-    $appDir = [System.IO.Path]::GetFullPath((Join-Path $global:ROMs_ROOT $packageConfig.name))
+    # Containment: the package name is attacker-controlled manifest data, so it is
+    # validated as a plain identifier (no path separators, no "..") and the joined
+    # path is asserted to stay inside ROMs_ROOT before any deletion can occur.
+    $appDir = Assert-PathWithinRoot -Path (Join-Path $global:ROMs_ROOT (Get-SafeName $packageConfig.name)) -Root $global:ROMs_ROOT
 
     if (-not $global:AutoConfirm) {
         $confirm = Read-Host "This will delete $appDir and all tracked shims. Proceed? (y/n)"
@@ -25,7 +28,10 @@ function Invoke-Uninstallation {
     
     # 1. Pre-Uninstall Hook
     $preRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "preUninstall"
-    $preAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $preRel))
+    # Containment: the hook relative path is attacker-controlled manifest data, so
+    # it is validated (no "..", drive, UNC, or ADS) and resolved strictly inside
+    # $appDir before it is handed to pwsh.
+    $preAbs = Get-SafeRelativePath -Relative $preRel -Root $appDir
     if (Test-Path $preAbs) {
         Write-Log "Tracing hook discovery: $preRel" "TRACE"
         Invoke-RomsHook -Path $preAbs -ContextName "preUninstall" | Out-Null
@@ -34,7 +40,9 @@ function Invoke-Uninstallation {
     # 2. Stage Post-Uninstall Hook (Persistence)
     # We must copy the postUninstall script to a temp location because $appDir will be deleted.
     $postRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "postUninstall"
-    $postAbs = [System.IO.Path]::GetFullPath((Join-Path $appDir $postRel))
+    # Containment: same guard as the pre-uninstall hook; the staged post-uninstall
+    # hook is copied from this resolved path, so it must stay inside $appDir.
+    $postAbs = Get-SafeRelativePath -Relative $postRel -Root $appDir
     
     $stagedPostHook = $null
     if (Test-Path $postAbs) {
@@ -48,10 +56,31 @@ function Invoke-Uninstallation {
     if ($packageConfig.artifacts) {
         Write-Log "Raw Artifacts List: $($packageConfig.artifacts | ConvertTo-Json -Compress)" "RAW"
         foreach ($art in $packageConfig.artifacts) {
-            if (Test-Path $art -PathType Leaf) { 
-                Write-Log "Tracing artifact removal: $art" "TRACE"
-                Remove-Item $art -Force
-                Write-Log "Removed artifact: $art" "DEBUG"
+            # Environment artifacts are scope markers ("env:KEY"), not file paths.
+            # They MUST short-circuit before the file containment check: "env:" is a
+            # real PowerShell drive so Test-Path would pass, and the colon then makes
+            # GetFullPath throw. Delegation to the orchestrator handles both scopes.
+            if ($art.StartsWith("env:")) {
+                Invoke-RomsEnvironmentRemove -Key $art.Substring(4)
+            } elseif (Test-Path $art -PathType Leaf) {
+                # Containment: an artifact is attacker-controlled manifest data, so
+                # it must resolve to a descendant of $appDir or $global:ROMs_BIN (the
+                # two places the engine legitimately writes: package files and shared
+                # command shims). A relative artifact resolves under $appDir first.
+                # The check is done silently against both roots here (not via the
+                # logging Assert-PathWithinRoot) so a rejection produces exactly one
+                # [ERROR] line per the Log-Only Error Abort rule.
+                $artResolved = [System.IO.Path]::GetFullPath($(if ([System.IO.Path]::IsPathRooted($art)) { $art } else { Join-Path $appDir $art }))
+                $inApp = ($artResolved -eq $appDir) -or $artResolved.StartsWith($appDir + '\', [System.StringComparison]::OrdinalIgnoreCase)
+                $inBin = ($artResolved -eq $global:ROMs_BIN) -or $artResolved.StartsWith($global:ROMs_BIN + '\', [System.StringComparison]::OrdinalIgnoreCase)
+                if (-not ($inApp -or $inBin)) {
+                    Write-Log "Artifact '$art' escapes both app and bin roots; removal aborted" "ERROR"
+                    throw [System.Security.SecurityException]::new("containment")
+                }
+
+                Write-Log "Tracing artifact removal: $artResolved" "TRACE"
+                Remove-Item $artResolved -Force
+                Write-Log "Removed artifact: $artResolved" "DEBUG"
             }
         }
     }
@@ -71,7 +100,7 @@ function Invoke-Uninstallation {
     # 3. Post-Uninstall Hook (Execution)
     if ($stagedPostHook) {
         Write-Log "Tracing post-uninstall execution: $stagedPostHook" "TRACE"
-        Invoke-RomsHook -Path $stagedPostHook -ContextName "postUninstall" | Out-Null
+        Invoke-RomsHook -Path $stagedPostHook -ContextName "postUninstall" -AllowStaged | Out-Null
         Remove-Item $stagedPostHook -Force # Cleanup temp script
     }
 
