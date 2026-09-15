@@ -5,6 +5,28 @@ All notable changes to the `rmspkg` standalone engine will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- **Shared containment guards**: new `lib/safety.ps1` module providing `Get-SafeName` (strict identifier allowlist), `Assert-PathWithinRoot`, and `Get-SafeRelativePath` (rejects `..` traversal, drive letters, UNC prefixes, and Alternate Data Stream names). All manifest-driven path sinks now route through this single module.
+- **CMD metacharacter escaping for shims**: `Get-CmdEscapedPath` in `lib/environment.ps1` caret-escapes `& | < >` (and literal `^`) in the executable path embedded in generated `.bat` shims, so a crafted manifest cannot inject commands into a launched shim.
+
+### Security
+- **Package name validation**: the manifest `name` is validated against the identifier allowlist before it composes the install root, blocking `..` traversal and absolute-path values.
+- **Per-package log path containment**: `rmspkg.ps1` validates the name through `Get-SafeName` before composing `C:\roms\logs\<name>.log` on both install and uninstall, so an attacker-controlled manifest name can no longer plant a log file outside the logs directory.
+- **File extraction containment**: every manifest `files[]` entry is resolved through `Get-SafeRelativePath` against the app directory before `ExtractToFile` writes it.
+- **Hook extraction and execution containment**: manifest hook paths (`preInstall`, `postInstall`, `preUninstall`, `postUninstall`) are validated relative to the app directory before extraction, and hook execution passes through a root-containment check before invoking `pwsh` (the legitimately staged post-uninstall copy is the sole explicit exception).
+- **Uninstall artifact containment**: stored artifact entries are checked against the sandbox roots (app directory or managed bin) before deletion; an escaping artifact aborts the uninstall with a single logged error.
+- **Bootstrap copy validation**: engine library filenames are validated as plain leaf names before being joined into the destination path during self-registration.
+- **Dependency identifier validation**: dependency tokens are passed through `Get-SafeName` before metadata lookups, closing the same trust-boundary gap on the dependency list.
+- **Elevation argument hardening**: the UAC relaunch builds its argument list from discrete tokens instead of a concatenated string, so paths containing spaces or metacharacters cannot inject extra flags into the elevated process.
+
+### Fixed
+- **Environment variable orchestration restored**: `lib/environment.ps1` — reinstated `Invoke-RomsEnvironmentSet` / `Invoke-RomsEnvironmentRemove` (collaterally removed during a logging refactor while `installer.ps1` still called them, crashing any package that declares `environment_variables`) and the matching `env:<KEY>` artifact branch in `lib/uninstaller.ps1`. Machine-scope writes fall back to User scope with a warning when the session is not elevated; removal clears both scopes and deletes the value properly (no ghost empty entry).
+- **Uninstall artifact path parse error**: the artifact containment resolution used a bare `if` expression that PowerShell parsed as a command; corrected to a subexpression.
+- **Fatal errors now persist to disk**: the engine's fatal paths ("Could not identify package", "Installation failed", "Unknown command", missing dependency, hook rejections) were written to the raw error stream and lost when stdout was redirected; they now go through the dual-target logger into the on-disk log.
+- **Rollback purges environment variables**: `lib/installer.ps1` — a failed post-install hook now clears every environment variable the install had already applied before re-throwing the original error. Previously the rollback deleted the app directory and metadata while the variables stayed in the registry with no artifact record, orphaning them permanently.
+- **Duplicate error lines removed**: containment rejections previously emitted the same message twice (throw string + log line). The guard layer now logs the descriptive reason exactly once and aborts with a message-less sentinel that callers recognize and do not re-log.
+
 ## [0.1.0-beta.2] - 2026-09-06
 ### Fixed
 - **Package Dependency Parsing**: `lib/core.ps1` — Fixed missing handling for the `dependencies.packages` property in `Check-RomsDependencies`, ensuring dependencies declared under the Trinity v1.1 schema are properly validated before installation.

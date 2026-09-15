@@ -182,9 +182,27 @@ function Invoke-Installation {
                 Remove-Item $appDir -Recurse -Force 
             }
             $m = Join-Path $global:ROMs_METADATA "$($packageConfig.name).json"
-            if (Test-Path $m) { 
+            if (Test-Path $m) {
                 Write-Log "Rolling back: Deleting metadata $m" "WARN"
-                Remove-Item $m -Force 
+                Remove-Item $m -Force
+            }
+            # B7: environment variables are applied BEFORE the post-install
+            # hook runs, but their "env:<KEY>" markers only reach the metadata
+            # file on success. Without this purge, a hook failure rolls back
+            # the app directory and metadata yet leaves the variables orphaned
+            # in the registry — no later uninstall can find them. Walk the
+            # in-memory artifact list and clear every env: marker; removal is
+            # scope-neutral (Machine then User) exactly like the uninstall path.
+            # Each purge is isolated in its own try/catch so a failed registry
+            # cleanup can never mask the original install error we re-throw.
+            foreach ($art in @($global:globalArtifacts)) {
+                if ($art.StartsWith("env:")) {
+                    try {
+                        Invoke-RomsEnvironmentRemove -Key $art.Substring(4)
+                    } catch {
+                        Write-Log "Rollback could not purge environment artifact: $art" "WARN"
+                    }
+                }
             }
         }
         throw $_
