@@ -186,22 +186,31 @@ function Invoke-Installation {
                 Write-Log "Rolling back: Deleting metadata $m" "WARN"
                 Remove-Item $m -Force
             }
-            # B7: environment variables are applied BEFORE the post-install
-            # hook runs, but their "env:<KEY>" markers only reach the metadata
-            # file on success. Without this purge, a hook failure rolls back
-            # the app directory and metadata yet leaves the variables orphaned
-            # in the registry — no later uninstall can find them. Walk the
-            # in-memory artifact list and clear every env: marker; removal is
-            # scope-neutral (Machine then User) exactly like the uninstall path.
-            # Each purge is isolated in its own try/catch so a failed registry
+            # B7+B8: environment variables (step 7) and the command shim
+            # (step 6) are applied BEFORE the post-install hook runs, but
+            # their artifact entries only reach the metadata file on
+            # success. Without this purge, a hook failure rolls back the
+            # app directory and metadata yet leaves the variables orphaned
+            # in the registry and the shim dangling in ROMs_BIN — no later
+            # uninstall can find either, because the artifact record is
+            # gone. Walk the in-memory artifact list: "env:<KEY>" markers
+            # go through scope-neutral removal (Machine then User) exactly
+            # like the uninstall path; raw-path entries (shims) are deleted
+            # if still present. Only the engine itself appends raw paths to
+            # this list (Create-Shim, under ROMs_BIN from a name already
+            # validated by Get-SafeName), so they are trusted values.
+            # Each purge is isolated in its own try/catch so a failed
             # cleanup can never mask the original install error we re-throw.
             foreach ($art in @($global:globalArtifacts)) {
-                if ($art.StartsWith("env:")) {
-                    try {
+                try {
+                    if ($art.StartsWith("env:")) {
                         Invoke-RomsEnvironmentRemove -Key $art.Substring(4)
-                    } catch {
-                        Write-Log "Rollback could not purge environment artifact: $art" "WARN"
+                    } elseif (Test-Path $art -PathType Leaf) {
+                        Remove-Item $art -Force
+                        Write-Log "Rollback removed artifact: $art" "INFO"
                     }
+                } catch {
+                    Write-Log "Rollback could not purge artifact: $art" "WARN"
                 }
             }
         }

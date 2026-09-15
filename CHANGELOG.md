@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Uninstall artifact path parse error**: the artifact containment resolution used a bare `if` expression that PowerShell parsed as a command; corrected to a subexpression.
 - **Fatal errors now persist to disk**: the engine's fatal paths ("Could not identify package", "Installation failed", "Unknown command", missing dependency, hook rejections) were written to the raw error stream and lost when stdout was redirected; they now go through the dual-target logger into the on-disk log.
 - **Rollback purges environment variables**: `lib/installer.ps1` — a failed post-install hook now clears every environment variable the install had already applied before re-throwing the original error. Previously the rollback deleted the app directory and metadata while the variables stayed in the registry with no artifact record, orphaning them permanently.
+- **Rollback purges command shims too**: `lib/installer.ps1` — the rollback artifact sweep now removes every tracked artifact of the failed transaction, not just environment markers, so a rolled-back install can no longer leave a launcher stub in the managed bin directory pointing at files that were deleted.
 - **Duplicate error lines removed**: containment rejections previously emitted the same message twice (throw string + log line). The guard layer now logs the descriptive reason exactly once and aborts with a message-less sentinel that callers recognize and do not re-log.
 
 ## [0.1.0-beta.2] - 2026-09-06
