@@ -72,20 +72,17 @@ function Get-SafeRelativePath {
         [Parameter(Mandatory = $true)][string]$Root
     )
 
-    # UNC-prefix check. NOTE: the leading-'\\' (double-backslash) branch is
-    # effectively dead for the engine's call sites. All callers pass a
-    # manifest-relative path fetched from Get-RomsHookPath or a files[] entry,
-    # and those are single-segment/forward-slash values; a raw two-backslash
-    # string ("\\server\share") is a legal Windows path character sequence, so
-    # PowerShell's Join-Path treats it as a relative segment list and the value
-    # is swallowed into Root (it resolves to <Root>\server\share) rather than
-    # matching this StartsWith('\\') test. The '//' (forward-slash) form IS
-    # caught here. This is a defense-in-depth inconsistency, NOT a live escape:
-    # the swallowed path is still fully contained inside Root (and any ".."
-    # segments are still rejected below), so no write can leave Root. See
-    # TODO.md ("Double-backslash UNC prefix not rejected") for a recommended,
-    # safe hardening that normalizes separator form before this check.
-    if ($Relative.StartsWith('\\') -or $Relative.StartsWith('//')) {
+    # Separator-rooted / UNC rejection. Normalize the separator form first
+    # (the probe is for the prefix test ONLY - $Relative itself is untouched
+    # and the resolve/containment logic below is unchanged) so a leading
+    # backslash or slash is detected deterministically no matter how the
+    # value was authored or decoded. A single leading separator is rejected
+    # too: it is drive-relative on Windows ("\Windows" resolves against the
+    # current drive's root), so refusing it matches the guard's stated
+    # "relative path only" contract instead of relying on Join-Path to
+    # happen to swallow it into Root.
+    $uncProbe = $Relative.Replace('\', '/')
+    if ($uncProbe.StartsWith('/')) {
         Write-Log "Relative path '$Relative' contains a UNC prefix" "ERROR"
         throw [System.Security.SecurityException]::new("containment")
     }

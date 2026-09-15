@@ -5,6 +5,10 @@ All notable changes to the `rmspkg` standalone engine will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Security
+- **Deterministic UNC rejection in path guards**: `lib/safety.ps1` — `Get-SafeRelativePath` normalizes path separators before its prefix check, so a manifest path that starts with any separator form (`\server\...`, `\\server\...`, `/server/...`, `//server/...`) is rejected before any join or write. Previously only the forward-slash forms were caught reliably; backslash-rooted paths were swallowed into the install root by the join (contained, never an escape) instead of tripping the guard.
+
 ## [v0.2.0-alpha] - 2026-09-15
 ### Added
 - **Shared containment guards**: new `lib/safety.ps1` module providing `Get-SafeName` (strict identifier allowlist), `Assert-PathWithinRoot`, and `Get-SafeRelativePath` (rejects `..` traversal, drive letters, UNC prefixes, and Alternate Data Stream names). All manifest-driven path sinks now route through this single module.
