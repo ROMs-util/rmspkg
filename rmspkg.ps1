@@ -160,7 +160,12 @@ Invoke-SelfBootstrap -finalInstallEngine $finalInstallEngine -scriptRoot $PSScri
 # Action Routing
 switch ($command) {
     "uninstall" {
-        $script:logFile = Join-Path $global:ROMs_LOGS "$($packageConfig.name).log"
+        # B1 guard: the log file name must pass Get-SafeName BEFORE composition.
+        # A manifest name is attacker-controlled text; joining it raw lets a
+        # traversal value ("..\x") plant a log file OUTSIDE C:\roms\logs before
+        # any deeper guard runs. Rejection aborts via the message-less
+        # "containment" sentinel (Log-Only Error Abort).
+        $script:logFile = Join-Path $global:ROMs_LOGS "$(Get-SafeName $packageConfig.name).log"
         Write-Log "Starting uninstallation for $commandName"
         Invoke-Uninstallation -packageConfig $packageConfig
         # MIRROR PIPE: When stdout is redirected, route banner through Console.Error
@@ -181,9 +186,17 @@ switch ($command) {
         exit 0
     }
     "install" {
-        $script:logFile = Join-Path $global:ROMs_LOGS "$($packageConfig.name).log"
         Write-Log "Starting installation for $commandName"
         try {
+            # B1 guard: validate the manifest name via Get-SafeName before the
+            # per-package log file is ever composed. A manifest name is
+            # attacker-controlled text; joining it raw lets a traversal value
+            # ("..\x") plant a log OUTSIDE C:\roms\logs. Inside the try, a
+            # rejection throws the message-less "containment" sentinel, the
+            # catch below logs one failure line, and $script:logFile stays
+            # unset — so no file handle is ever opened under a bad name.
+            $safeName = Get-SafeName $packageConfig.name
+            $script:logFile = Join-Path $global:ROMs_LOGS "$safeName.log"
             $installedPath = Invoke-Installation -packageConfig $packageConfig -isRmsPackage $isRmsPackage -packagePath $resolvedPath -sourceDir (Split-Path $PSCommandPath) -noShim:$global:NoShim
 
             $packageId = if ($packageConfig.version) { "$($packageConfig.name)-$($packageConfig.version)" } else { $packageConfig.name }
