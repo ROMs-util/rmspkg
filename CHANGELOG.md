@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Security
+- **Overwrite warning for environment variables**: `lib/environment.ps1` — `Invoke-RomsEnvironmentSet` checks the target scope before writing. A differing Machine value receives a conditional warning because elevation may fail; if Machine scope is denied and execution falls back to User, the existing User value receives an overwrite warning. The write itself and the `env:` artifact tracking are unchanged.
 - **Deterministic UNC rejection in path guards**: `lib/safety.ps1` — `Get-SafeRelativePath` normalizes path separators before its prefix check, so a manifest path that starts with any separator form (`\server\...`, `\\server\...`, `/server/...`, `//server/...`) is rejected before any join or write. Previously only the forward-slash forms were caught reliably; backslash-rooted paths were swallowed into the install root by the join (contained, never an escape) instead of tripping the guard.
 
 ## [v0.2.0-alpha] - 2026-09-15

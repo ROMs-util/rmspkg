@@ -54,8 +54,13 @@ function Invoke-RomsEnvironmentSet {
         $envKey = $prop.Name
         $envVal = $prop.Value
         $targetScope = $Scope
+
         if ($targetScope -eq "Machine") {
+            $preVal = [Environment]::GetEnvironmentVariable($envKey, "Machine")
             try {
+                if ($null -ne $preVal -and $preVal -ne $envVal) {
+                    Write-Log "Machine variable '$envKey' currently differs from the manifest (current: '$preVal'). The Machine write will replace it if elevation succeeds. Previous value is not backed up and will be lost on uninstall." "WARN"
+                }
                 [System.Environment]::SetEnvironmentVariable($envKey, $envVal, "Machine")
             } catch {
                 Write-Log "Machine scope denied (not elevated). Writing $envKey to User scope instead." "WARN"
@@ -63,6 +68,10 @@ function Invoke-RomsEnvironmentSet {
             }
         }
         if ($targetScope -eq "User") {
+            $preVal = [Environment]::GetEnvironmentVariable($envKey, "User")
+            if ($null -ne $preVal -and $preVal -ne $envVal) {
+                Write-Log "Overwriting existing User variable '$envKey' (current: '$preVal'). Previous value is not backed up and will be lost on uninstall." "WARN"
+            }
             [System.Environment]::SetEnvironmentVariable($envKey, $envVal, "User")
         }
         Write-Log "Setting Environment Variable: $envKey = $envVal ($targetScope)" "INFO"
