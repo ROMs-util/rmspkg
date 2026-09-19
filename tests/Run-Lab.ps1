@@ -16,6 +16,9 @@ $MetadataDir = "C:\roms\.metadata"
 $BinDir      = "C:\roms\bin"
 $LogsDir     = "C:\roms\logs"
 
+# Truncate master log to prevent stale entries from contaminating test results.
+if (Test-Path $MasterLog) { Set-Content -Path $MasterLog -Value "" -Encoding utf8 -Force }
+
 $script:Pass = 0
 $script:Fail = 0
 

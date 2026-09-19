@@ -25,6 +25,9 @@ $MetadataDir = "C:\roms\.metadata"
 $BinDir      = "C:\roms\bin"
 $LogsDir     = "C:\roms\logs"
 
+# Truncate master log to prevent stale entries from contaminating test results.
+if (Test-Path $MasterLog) { Set-Content -Path $MasterLog -Value "" -Encoding utf8 -Force }
+
 # Containment-class messages produced by safety.ps1 / Check-RomsDependencies.
 $ContainmentPattern = 'escapes root|traversal segment|Invalid name|UNC prefix|drive-letter segment'
 
