@@ -48,7 +48,7 @@ function Assert-PathWithinRoot {
     $resolvedRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\')
     $resolvedPath = [System.IO.Path]::GetFullPath($Path)
 
-    if ($resolvedPath -eq $resolvedRoot) {
+    if ($resolvedPath.Equals($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
         return $resolvedPath
     }
 
