@@ -257,8 +257,8 @@ Report (-not (Test-Path "C:\roms\hook-deep")) "C2 : lab dir purged"
 Report (-not (Test-Path "C:\roms\.metadata\hook-deep.json")) "C2 : lab metadata purged"
 Clean-Residue @("hook-deep")
 
-# C3: M3 - tampered metadata whose artifacts[] escape BOTH roots must abort
-# the uninstall before any deletion.
+# C3: M3 - tampered metadata whose artifacts[] escape BOTH roots must skip
+# the offending artifact and continue the sweep (app dir is still purged).
 $m3Name = "sec-e2e-m3"
 $m3Dir  = "C:\roms\sec-e2e-m3"
 $m3File = "C:\Users\Public\sec-e2e-m3-target.txt"   # outside app+bin roots
@@ -272,10 +272,11 @@ $m3Meta | Out-File "C:\roms\.metadata\sec-e2e-m3.json" -Encoding utf8
 $marker = Mark-Log
 $r = Invoke-Engine @("uninstall", $m3Name, "-y")
 $tail = Get-LogTail $marker
-Report ($r.Exit -ne 0) "C3 : escaping-artifact uninstall aborts (nonzero exit)" "exit $($r.Exit)"
+Report ($r.Exit -eq 0) "C3 : escaping-artifact uninstall skips escape and exits 0" "exit $($r.Exit)"
 $aErr = @($tail | Where-Object { $_ -match '\[ERROR\]' -and $_ -match 'escapes both app and bin roots' })
 Report ($aErr.Count -eq 1) "C3 : exactly one artifact-escape ERROR" "got $($aErr.Count)"
 Report (Test-Path $m3File) "C3 : outside-root file survived"
+Report (-not (Test-Path $m3Dir)) "C3 : app dir purged despite escape"
 Clean-Residue @($m3Name)
 if (Test-Path $m3File) { Remove-Item $m3File -Force }
 
