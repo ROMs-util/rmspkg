@@ -74,8 +74,8 @@ function Invoke-Uninstallation {
                 $inApp = ($artResolved -eq $appDir) -or $artResolved.StartsWith($appDir + '\', [System.StringComparison]::OrdinalIgnoreCase)
                 $inBin = ($artResolved -eq $global:ROMs_BIN) -or $artResolved.StartsWith($global:ROMs_BIN + '\', [System.StringComparison]::OrdinalIgnoreCase)
                 if (-not ($inApp -or $inBin)) {
-                    Write-Log "Artifact '$art' escapes both app and bin roots; removal aborted" "ERROR"
-                    throw [System.Security.SecurityException]::new("containment")
+                    Write-Log "Artifact '$art' escapes both app and bin roots; skipping" "ERROR"
+                    continue
                 }
 
                 Write-Log "Tracing artifact removal: $artResolved" "TRACE"
