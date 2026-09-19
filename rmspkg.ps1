@@ -170,7 +170,12 @@ switch ($command) {
         # traversal value ("..\x") plant a log file OUTSIDE C:\roms\logs before
         # any deeper guard runs. Rejection aborts via the message-less
         # "containment" sentinel (Log-Only Error Abort).
-        $script:logFile = Join-Path $global:ROMs_LOGS "$(Get-SafeName $packageConfig.name).log"
+        try {
+            $script:logFile = Join-Path $global:ROMs_LOGS "$(Get-SafeName $packageConfig.name).log"
+        } catch {
+            Write-Log "Failed to compose log path for uninstall: $_" "ERROR"
+            throw [System.Security.SecurityException]::new("containment")
+        }
         Write-Log "Starting uninstallation for $commandName"
         Invoke-Uninstallation -packageConfig $packageConfig
         # MIRROR PIPE: When stdout is redirected, route banner through Console.Error
