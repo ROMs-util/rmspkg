@@ -58,7 +58,7 @@ function Invoke-Installation {
                     }
                     Write-Log "Pre-extracted hook: $preRel" "DEBUG"
                 }
-            } finally { $zip.Dispose() }
+            } finally { if ($null -ne $zip) { $zip.Dispose() } }
         }
 
         # 2. Pre-Install Hook
@@ -104,7 +104,7 @@ function Invoke-Installation {
                         Write-Log "Extracted: $f" "DEBUG"
                     }
                 }
-            } finally { $zip.Dispose() }
+            } finally { if ($null -ne $zip) { $zip.Dispose() } }
         } else {
             foreach ($f in (@($packageConfig.files) + @("roms_package.json"))) {
                 # Containment: resolve both source and destination under their
