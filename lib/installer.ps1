@@ -50,7 +50,12 @@ function Invoke-Installation {
                     $d = Get-SafeRelativePath -Relative $preRel -Root $appDir
                     $p = Split-Path $d
                     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
-                    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
+                    try {
+                        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
+                    } catch {
+                        Write-Log "Extraction failed for hook $preRel : $_" "ERROR"
+                        throw [System.Security.SecurityException]::new("containment")
+                    }
                     Write-Log "Pre-extracted hook: $preRel" "DEBUG"
                 }
             } finally { $zip.Dispose() }
@@ -90,7 +95,12 @@ function Invoke-Installation {
                         $d = Get-SafeRelativePath -Relative $f -Root $appDir
                         $p = Split-Path $d
                         if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
-                        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
+                        try {
+                            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $d, $true)
+                        } catch {
+                            Write-Log "Extraction failed for $fNormalized : $_" "ERROR"
+                            throw [System.Security.SecurityException]::new("containment")
+                        }
                         Write-Log "Extracted: $f" "DEBUG"
                     }
                 }
