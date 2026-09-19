@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - **Overwrite warning for environment variables**: `lib/environment.ps1` — `Invoke-RomsEnvironmentSet` checks the target scope before writing. A differing Machine value receives a conditional warning because elevation may fail; if Machine scope is denied and execution falls back to User, the existing User value receives an overwrite warning. The write itself and the `env:` artifact tracking are unchanged.
 - **Deterministic UNC rejection in path guards**: `lib/safety.ps1` — `Get-SafeRelativePath` normalizes path separators before its prefix check, so a manifest path that starts with any separator form (`\server\...`, `\\server\...`, `/server/...`, `//server/...`) is rejected before any join or write. Previously only the forward-slash forms were caught reliably; backslash-rooted paths were swallowed into the install root by the join (contained, never an escape) instead of tripping the guard.
+- **Case-insensitive path equality**: `lib/safety.ps1` — `Assert-PathWithinRoot` now uses `OrdinalIgnoreCase` comparison for the root-vs-path equality check, preventing false rejections on Windows where filesystem casing is arbitrary.
+
+### Fixed
+- **Extraction failures now trigger rollback**: `lib/installer.ps1` — `ExtractToFile` calls are now wrapped in try/catch. A mid-archive extraction failure (locked path, disk full) is no longer silently swallowed; the error is logged and a containment sentinel is thrown, causing the main catch block to trigger full rollback.
+- **Uninstall sweep skips escaping artifacts**: `lib/uninstaller.ps1` — the artifact containment guard now uses `continue` instead of `throw`. A single escaping artifact is logged and skipped, allowing the rest of the sweep to finish. Previously, the throw aborted the entire loop, leaving behind shims, app files, and the app directory.
+- **Metadata JSON hardening**: `lib/installer.ps1` — metadata write is now wrapped in try/catch; a failed write (disk full, permissions) aborts the transaction via containment sentinel. `rmspkg.ps1` — metadata read now catches corrupted JSON and logs a clear error instead of crashing.
+- **ZipFile handle leak prevented**: `lib/installer.ps1` — both `finally` blocks now guard `$zip.Dispose()` against `$null`, preventing a secondary exception if `ZipFile.OpenRead` throws before assignment.
+- **Uninstall log-path failure routed through logger**: `rmspkg.ps1` — the per-package log path composition for uninstall is now inside try/catch, so a name validation failure logs one `[ERROR]` line and throws the containment sentinel per the Log-Only Error Abort pattern.
+- **Log parent-dir guard**: `rmspkg.ps1` — both install and uninstall paths now create `$global:ROMs_LOGS` if missing before composing the per-package log file path, preventing unhandled `DirectoryNotFoundException`.
+- **Redundant Add-Type replaced with using namespace**: `lib/installer.ps1` — two redundant `Add-Type -AssemblyName System.IO.Compression.FileSystem` calls replaced with `using namespace System.IO.Compression` at file top.
 
 ## [v0.2.0-alpha] - 2026-09-15
 ### Added
