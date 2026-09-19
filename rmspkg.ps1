@@ -170,6 +170,7 @@ switch ($command) {
         # traversal value ("..\x") plant a log file OUTSIDE C:\roms\logs before
         # any deeper guard runs. Rejection aborts via the message-less
         # "containment" sentinel (Log-Only Error Abort).
+        if (-not (Test-Path $global:ROMs_LOGS)) { New-Item -ItemType Directory -Path $global:ROMs_LOGS -Force | Out-Null }
         try {
             $script:logFile = Join-Path $global:ROMs_LOGS "$(Get-SafeName $packageConfig.name).log"
         } catch {
@@ -197,6 +198,7 @@ switch ($command) {
     }
     "install" {
         Write-Log "Starting installation for $commandName"
+        if (-not (Test-Path $global:ROMs_LOGS)) { New-Item -ItemType Directory -Path $global:ROMs_LOGS -Force | Out-Null }
         try {
             # B1 guard: validate the manifest name via Get-SafeName before the
             # per-package log file is ever composed. A manifest name is
