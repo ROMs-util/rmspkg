@@ -3,9 +3,10 @@
 ## Quick Start
 
 ```powershell
-# Run all three suites in order:
+# Run all four suites in order:
 pwsh -File tests/Test-Guards.ps1      # Phase A: unit-level guard contracts
 pwsh -File tests/Run-E2E.ps1          # Phase B/C/D: E2E security + lifecycle
+pwsh -File tests/Run-Lab.ps1          # Lab: package_testnet scenarios (hooks, rollback, env vars)
 pwsh -File tests/Negative-Cases.ps1   # Error-path negative tests
 ```
 
@@ -15,6 +16,7 @@ pwsh -File tests/Negative-Cases.ps1   # Error-path negative tests
 |------|-------|---------|----------|
 | `Test-Guards.ps1` | A | Unit tests for `lib/safety.ps1` guards and `lib/environment.ps1` CMD escaping | 30/30 |
 | `Run-E2E.ps1` | B/C/D | E2E security attacks, lifecycle round-trip, verbosity regression | 74/74 |
+| `Run-Lab.ps1` | Lab | Engine-level tests using `package_testnet` .rms files: hooks, rollback, env vars, metadata tracking | 40/40 |
 | `Negative-Cases.ps1` | -- | Error-path coverage for pre-rc fixes (P1b, P4, P6, P8) | 6/6 |
 
 ## Fixture Builder
