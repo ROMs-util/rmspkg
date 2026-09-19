@@ -225,6 +225,7 @@ switch ($command) {
                 commandName = $packageConfig.commandName
                 primaryExecutable = $primaryExecutable
                 executables = $foundExecutables
+                priority = $packageConfig.priority
             }
             $reportJson = $installationReport | ConvertTo-Json -Depth 10 -Compress
             Write-Log "Raw Installation Report: $reportJson" "RAW"
