@@ -117,7 +117,12 @@ else {
         else {
             $metaJson = Join-Path $global:ROMs_METADATA "$inputPath.json"
             if (Test-Path $metaJson) {
-                $packageConfig = Get-Content $metaJson -Raw | ConvertFrom-Json
+                try {
+                    $packageConfig = Get-Content $metaJson -Raw | ConvertFrom-Json
+                } catch {
+                    Write-Log "Corrupted metadata for '$inputPath': $_" "ERROR"
+                    throw [System.Security.SecurityException]::new("containment")
+                }
             }
         }
     } elseif ($command -eq "uninstall") {

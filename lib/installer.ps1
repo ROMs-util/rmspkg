@@ -161,7 +161,12 @@ function Invoke-Installation {
             $final.artifacts = $global:globalArtifacts
         }
 
-        $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $global:ROMs_METADATA "$($packageConfig.name).json") -Encoding utf8
+        try {
+            $final | ConvertTo-Json -Depth 10 | Out-File (Join-Path $global:ROMs_METADATA "$($packageConfig.name).json") -Encoding utf8
+        } catch {
+            Write-Log "Failed to write metadata for $($packageConfig.name): $_" "ERROR"
+            throw [System.Security.SecurityException]::new("containment")
+        }
         if (-not $noShim) { Write-Log "Registered with $($global:globalArtifacts.Count) artifacts." "DEBUG" }
 
         # 2. Post-Install Hook
