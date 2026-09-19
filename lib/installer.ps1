@@ -1,3 +1,5 @@
+using namespace System.IO.Compression
+
 # ---------------------------------------------
 # PACKAGE INSTALLATION (Atomic)
 # Extracts and registers an .rms package or project folder.
@@ -38,7 +40,6 @@ function Invoke-Installation {
 
         if ($isRmsPackage) {
             Write-Log "Tracing hook discovery in ZIP..." "TRACE"
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
             $zip = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
             try {
                 $preRel = Get-RomsHookPath -PackageConfig $packageConfig -AppDir $appDir -HookType "preInstall"
@@ -74,7 +75,6 @@ function Invoke-Installation {
         }
 
         if ($isRmsPackage) {
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
             $zip = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
             try {
                 # Auto-include hooks from package
